@@ -1,3 +1,5 @@
+import { normalizeText } from "./text.js";
+
 const SYNONYMS: Record<string, string[]> = {
   "diamond oa": ["no APC", "no publication fee", "no author fee", "no article processing charge"],
   "open access": ["OA", "free access"],
@@ -13,8 +15,6 @@ const SYNONYMS: Record<string, string[]> = {
   archives: ["archival studies", "digital archives", "manuscript archives"],
   kurdish: ["Kurmanji", "Sorani", "Kurdish language"]
 };
-
-import { normalizeText } from "./text.js";
 
 export const expandSynonyms = (query: string): string[] => {
   const normalized = normalizeText(query);
