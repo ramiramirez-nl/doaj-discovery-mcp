@@ -9,6 +9,7 @@ import { FileCacheStore } from "./cache/file-cache-store.js";
 import { loadConfig } from "./config.js";
 import { DoajClient } from "./doaj/client.js";
 import { renderHomePage, renderPrivacyPage } from "./http/pages.js";
+import { createRateLimiter } from "./http/rate-limit.js";
 import { registerDiscoveryTools } from "./tools/register.js";
 
 export const createMcpServer = (client: DoajClient, config: ReturnType<typeof loadConfig>): McpServer => {
@@ -26,6 +27,10 @@ export const createHttpServer = (
 ): ReturnType<typeof createServer> => {
   const cache = config.enableCache ? new FileCacheStore(config.cacheDir) : undefined;
   const client = suppliedClient ?? new DoajClient(config, cache);
+  const rateLimiter = createRateLimiter({
+    maxRequests: config.rateLimitMaxRequests,
+    windowMs: config.rateLimitWindowSeconds * 1_000
+  });
 
   return createServer(async (req, res) => {
     const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -56,6 +61,23 @@ export const createHttpServer = (
     }
 
     if (requestUrl.pathname === "/mcp") {
+      const rate = rateLimiter.allow(req.socket.remoteAddress ?? "unknown");
+      if (!rate.allowed) {
+        res.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": String(rate.retryAfterSeconds)
+        });
+        res.end(JSON.stringify({ error: "rate_limited", retryAfterSeconds: rate.retryAfterSeconds }));
+        return;
+      }
+
+      const contentLength = Number.parseInt(req.headers["content-length"] ?? "0", 10);
+      if (Number.isFinite(contentLength) && contentLength > config.maxRequestBodyBytes) {
+        res.writeHead(413, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "request_too_large" }));
+        return;
+      }
+
       // SDK runtime uses an explicit undefined generator for stateless mode, but its optional
       // property type conflicts with this project's exactOptionalPropertyTypes setting.
       const transport = new StreamableHTTPServerTransport({

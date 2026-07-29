@@ -90,4 +90,35 @@ describe("stateless MCP transport", () => {
     expect(dataLine).toBeDefined();
     expect(JSON.parse(dataLine!.slice("data: ".length)).result.serverInfo.name).toBe("doaj-discovery-mcp");
   });
+
+  test("limits public MCP bursts and returns retry information", async () => {
+    const server = createHttpServer(
+      loadConfig({ ENABLE_CACHE: "false", RATE_LIMIT_MAX_REQUESTS: "1", RATE_LIMIT_WINDOW_SECONDS: "60" })
+    );
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const request = {
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" }
+      }
+    };
+
+    const send = () =>
+      fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...request })
+      });
+
+    expect((await send()).status).toBe(200);
+    const limited = await send();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(await limited.json()).toEqual({ error: "rate_limited", retryAfterSeconds: 60 });
+  });
 });

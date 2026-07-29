@@ -4,6 +4,9 @@ export interface AppConfig {
   port: number;
   doajApiBaseUrl: string;
   doajRequestTimeoutMs: number;
+  rateLimitMaxRequests: number;
+  rateLimitWindowSeconds: number;
+  maxRequestBodyBytes: number;
   enableCache: boolean;
   cacheDir: string;
   cacheTtlSeconds: number;

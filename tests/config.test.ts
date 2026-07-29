@@ -10,6 +10,9 @@ describe("loadConfig", () => {
     expect(config.doajApiBaseUrl).toBe("https://doaj.org/api");
     expect("doajApiKey" in config).toBe(false);
     expect(config.doajRequestTimeoutMs).toBe(10_000);
+    expect(config.rateLimitMaxRequests).toBe(120);
+    expect(config.rateLimitWindowSeconds).toBe(60);
+    expect(config.maxRequestBodyBytes).toBe(100_000);
     expect(config.enableSemanticSearch).toBe(false);
     expect(config.semanticProvider).toBe("none");
     expect(Object.keys(config).some((key) => key.toLowerCase().includes("openai"))).toBe(false);

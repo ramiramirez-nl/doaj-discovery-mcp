@@ -13,6 +13,20 @@ export const semanticFallbackWarning = (): string =>
 const discoveryWarning =
   "Discovery-only tool. Does not perform DOAJ editorial review, criteria checking, compliance checking, endogeny checking, or publishing decisions.";
 
+const doajReadOnlyAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true
+} as const;
+
+const localReadOnlyAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+} as const;
+
 const limitSchema = (config: AppConfig) =>
   z
     .number()
@@ -32,7 +46,7 @@ export const registerDiscoveryTools = (
   config: AppConfig
 ): void => {
   const baseInput = {
-    query: z.string().min(2),
+    query: z.string().min(2).max(4_000),
     limit: limitSchema(config),
     strict: z.boolean().optional().default(false)
   };
@@ -42,12 +56,13 @@ export const registerDiscoveryTools = (
     {
       title: "Search DOAJ journals",
       description: "Find DOAJ-indexed journals using lexical relevance and metadata preferences.",
+      annotations: doajReadOnlyAnnotations,
       inputSchema: {
         ...baseInput,
-        country: z.string().optional(),
-        language: z.string().optional(),
+        country: z.string().max(100).optional(),
+        language: z.string().max(100).optional(),
         noApcOnly: z.boolean().optional().default(false),
-        license: z.string().optional()
+        license: z.string().max(200).optional()
       }
     },
     async (input) => {
@@ -72,6 +87,7 @@ export const registerDiscoveryTools = (
     {
       title: "Search DOAJ articles",
       description: "Find DOAJ-indexed articles using lexical relevance and metadata preferences.",
+      annotations: doajReadOnlyAnnotations,
       inputSchema: baseInput
     },
     async (input) => {
@@ -90,12 +106,13 @@ export const registerDiscoveryTools = (
     {
       title: "Recommend DOAJ journals for manuscript fit",
       description: "Suggest discovery candidates for a manuscript abstract or topic; not an acceptance prediction.",
+      annotations: doajReadOnlyAnnotations,
       inputSchema: {
-        abstract: z.string().min(20),
-        title: z.string().optional(),
+        abstract: z.string().min(20).max(12_000),
+        title: z.string().max(500).optional(),
         limit: limitSchema(config),
-        preferredLanguage: z.string().optional(),
-        preferredCountry: z.string().optional(),
+        preferredLanguage: z.string().max(100).optional(),
+        preferredCountry: z.string().max(100).optional(),
         noApcOnly: z.boolean().optional().default(false)
       }
     },
@@ -122,6 +139,7 @@ export const registerDiscoveryTools = (
     {
       title: "Find diamond OA journals",
       description: "Find no-fee or diamond open-access DOAJ journals.",
+      annotations: doajReadOnlyAnnotations,
       inputSchema: baseInput
     },
     async (input) => {
@@ -142,9 +160,10 @@ export const registerDiscoveryTools = (
     {
       title: "Find similar DOAJ articles",
       description: "Find similar articles using local lexical and metadata similarity.",
+      annotations: doajReadOnlyAnnotations,
       inputSchema: {
-        abstract: z.string().min(20),
-        title: z.string().optional(),
+        abstract: z.string().min(20).max(12_000),
+        title: z.string().max(500).optional(),
         limit: limitSchema(config)
       }
     },
@@ -168,7 +187,8 @@ export const registerDiscoveryTools = (
     {
       title: "Explain DOAJ metadata",
       description: "Explain DOAJ metadata terms such as APC, license, language, ISSN, or diamond OA.",
-      inputSchema: { term: z.string().min(1) }
+      annotations: localReadOnlyAnnotations,
+      inputSchema: { term: z.string().min(1).max(200) }
     },
     async (input) => format({ term: input.term, explanation: explainDoajMetadata(input.term) })
   );
