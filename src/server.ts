@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
+import { ICON_PATH, ICON_SVG } from "./branding.js";
 import { FileCacheStore } from "./cache/file-cache-store.js";
 import { loadConfig } from "./config.js";
 import { DoajClient } from "./doaj/client.js";
@@ -12,16 +13,26 @@ import { renderHomePage, renderPrivacyPage } from "./http/pages.js";
 import { createRateLimiter } from "./http/rate-limit.js";
 import { getClientKey, HttpRequestError, readJsonBody } from "./http/request.js";
 import { applySecurityHeaders, writeJson } from "./http/responses.js";
-import { SERVICE_NAME, SERVICE_VERSION } from "./meta.js";
+import { PUBLIC_BASE_URL, SERVICE_DISPLAY_NAME, SERVICE_NAME, SERVICE_VERSION } from "./meta.js";
 import { registerDiscoveryTools } from "./tools/register.js";
+
+const SERVICE_SUMMARY =
+  "Search DOAJ-indexed open-access journals and articles. Read-only discovery; no editorial review.";
 
 export const createMcpServer = (
   client: DoajClient,
   config: ReturnType<typeof loadConfig>
 ): McpServer => {
+  // Clients render these next to the server in their connector list. The icon must be an
+  // absolute URL because the client fetches it itself, not through this server's page.
+  const iconSrc = new URL(ICON_PATH, config.deploymentBaseUrl ?? PUBLIC_BASE_URL).toString();
   const server = new McpServer({
     name: SERVICE_NAME,
-    version: SERVICE_VERSION
+    title: SERVICE_DISPLAY_NAME,
+    version: SERVICE_VERSION,
+    description: SERVICE_SUMMARY,
+    websiteUrl: config.deploymentBaseUrl ?? PUBLIC_BASE_URL,
+    icons: [{ src: iconSrc, mimeType: "image/svg+xml", sizes: ["any"] }]
   });
   registerDiscoveryTools(server, client, config);
   return server;
@@ -56,6 +67,17 @@ export const createHttpServer = (
       if (req.method === "GET" && requestUrl.pathname === "/") {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(renderHomePage(baseUrl));
+        return;
+      }
+
+      if (req.method === "GET" && requestUrl.pathname === ICON_PATH) {
+        // Static, versionless brand asset: override the global no-store so clients and the
+        // connector UI can cache it instead of refetching on every page load.
+        res.writeHead(200, {
+          "content-type": "image/svg+xml; charset=utf-8",
+          "cache-control": "public, max-age=86400"
+        });
+        res.end(ICON_SVG);
         return;
       }
 

@@ -48,6 +48,33 @@ describe("public HTTP routes", () => {
     expect(body).toContain("not affiliated with, endorsed by, sponsored by, or operated by DOAJ");
   });
 
+  test("serves the brand icon as cacheable SVG and links it as the favicon", async () => {
+    const baseUrl = await startTestServer();
+
+    const page = await (await fetch(`${baseUrl}/`)).text();
+    expect(page).toContain('<link rel="icon" type="image/svg+xml" href="/icon.svg">');
+
+    const response = await fetch(`${baseUrl}/icon.svg`);
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("image/svg+xml");
+    // The global no-store must be overridden for this static asset.
+    expect(response.headers.get("cache-control")).toBe("public, max-age=86400");
+    expect(body).toContain("<svg");
+    expect(body).toContain("#FD5A3B");
+  });
+
+  test("allows images in the content security policy so the favicon is not blocked", async () => {
+    const baseUrl = await startTestServer();
+
+    const response = await fetch(`${baseUrl}/`);
+    const csp = response.headers.get("content-security-policy") ?? "";
+
+    expect(csp).toContain("img-src 'self'");
+    expect(csp).toContain("default-src 'none'");
+  });
+
   test("renders privacy statement without external assets", async () => {
     const baseUrl = await startTestServer();
 

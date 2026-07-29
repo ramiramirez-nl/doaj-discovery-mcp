@@ -1,3 +1,4 @@
+import { ICON_PATH, inlineIconMarkup } from "../branding.js";
 import { REPOSITORY_URL, SERVICE_DISPLAY_NAME, SERVICE_VERSION } from "../meta.js";
 
 const escapeHtml = (value: string): string =>
@@ -14,6 +15,7 @@ const documentLayout = (title: string, body: string): string => `<!doctype html>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Public, read-only MCP server for DOAJ journal and article discovery.">
+    <link rel="icon" type="image/svg+xml" href="${ICON_PATH}">
     <title>${escapeHtml(title)}</title>
     <style>
       :root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.55; }
@@ -22,6 +24,9 @@ const documentLayout = (title: string, body: string): string => `<!doctype html>
       main { width: min(100% - 32px, 780px); margin: 0 auto; padding: 44px 0 64px; }
       header { padding-bottom: 28px; border-bottom: 1px solid #d7dde3; }
       h1 { margin: 8px 0 12px; font-size: 2.35rem; line-height: 1.08; letter-spacing: 0; }
+      .titleline { display: flex; align-items: center; gap: 13px; margin: 8px 0 12px; }
+      .titleline h1 { margin: 0; }
+      .mark { flex: none; border-radius: 22%; }
       h2 { margin: 32px 0 10px; font-size: 1.2rem; letter-spacing: 0; }
       p, li { color: #42505d; }
       ol { padding-left: 22px; }
@@ -53,7 +58,7 @@ export const renderHomePage = (baseUrl: string): string => {
     SERVICE_DISPLAY_NAME,
     `<header>
       <p class="status">Public beta</p>
-      <h1>${SERVICE_DISPLAY_NAME}</h1>
+      <div class="titleline">${inlineIconMarkup(40)}<h1>${SERVICE_DISPLAY_NAME}</h1></div>
       <p class="lede">Search DOAJ-indexed journals and articles from an AI tool through one read-only MCP connection.</p>
       <p><strong>No account, API key, or payment.</strong></p>
     </header>

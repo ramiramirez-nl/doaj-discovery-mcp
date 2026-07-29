@@ -23,6 +23,32 @@ describe("tools helpers", () => {
     );
   });
 
+  test("advertises branding metadata to clients in serverInfo", () => {
+    const config = loadConfig({
+      ENABLE_CACHE: "false",
+      DEPLOYMENT_BASE_URL: "https://example.test"
+    });
+    const server = createMcpServer(new DoajClient(config), config);
+    const info = (
+      server.server as unknown as {
+        _serverInfo: {
+          name: string;
+          title?: string;
+          description?: string;
+          websiteUrl?: string;
+          icons?: Array<{ src: string; mimeType?: string }>;
+        };
+      }
+    )._serverInfo;
+
+    expect(info.title).toBe("DOAJ Discovery MCP");
+    expect(info.description).toContain("DOAJ");
+    expect(info.websiteUrl).toBe("https://example.test");
+    // Clients fetch the icon themselves, so it must be absolute, not a bare path.
+    expect(info.icons?.[0]?.src).toBe("https://example.test/icon.svg");
+    expect(info.icons?.[0]?.mimeType).toBe("image/svg+xml");
+  });
+
   test("marks every tool as read-only", () => {
     const server = createMcpServer(
       new DoajClient(loadConfig({ ENABLE_CACHE: "false" })),
