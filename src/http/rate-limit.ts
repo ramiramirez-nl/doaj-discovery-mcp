@@ -41,8 +41,17 @@ export const createRateLimiter = (options: RateLimiterOptions): RateLimiter => {
       let state = windows.get(boundedKey);
 
       if (!state && windows.size >= maxKeys) {
-        const oldestKey = windows.keys().next().value;
-        if (oldestKey) windows.delete(oldestKey);
+        // Evict the least-recently-started window rather than the first-inserted key, so a
+        // burst of new keys cannot push out clients that are actively being rate limited.
+        let lruKey: string | undefined;
+        let lruStartedAt = Number.POSITIVE_INFINITY;
+        for (const [candidateKey, candidateState] of windows) {
+          if (candidateState.startedAt < lruStartedAt) {
+            lruStartedAt = candidateState.startedAt;
+            lruKey = candidateKey;
+          }
+        }
+        if (lruKey) windows.delete(lruKey);
       }
 
       if (!state || timestamp - state.startedAt >= windowMs) {
