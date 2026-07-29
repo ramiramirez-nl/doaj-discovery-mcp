@@ -1,3 +1,5 @@
+import { REPOSITORY_URL, SERVICE_DISPLAY_NAME, SERVICE_VERSION } from "../meta.js";
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -11,21 +13,34 @@ const documentLayout = (title: string, body: string): string => `<!doctype html>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Public, read-only MCP server for DOAJ journal and article discovery.">
     <title>${escapeHtml(title)}</title>
     <style>
-      :root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.5; }
-      body { margin: 0; color: #18212b; background: #f6f8fa; }
-      main { max-width: 760px; margin: 0 auto; padding: 48px 24px 72px; }
-      h1 { margin: 0 0 12px; font-size: 2.4rem; line-height: 1.1; }
-      h2 { margin-top: 36px; font-size: 1.25rem; }
-      p, li { color: #40505f; }
+      :root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.55; }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: #17202a; background: #f7f8fa; }
+      main { width: min(100% - 32px, 780px); margin: 0 auto; padding: 44px 0 64px; }
+      header { padding-bottom: 28px; border-bottom: 1px solid #d7dde3; }
+      h1 { margin: 8px 0 12px; font-size: 2.35rem; line-height: 1.08; letter-spacing: 0; }
+      h2 { margin: 32px 0 10px; font-size: 1.2rem; letter-spacing: 0; }
+      p, li { color: #42505d; }
+      ol { padding-left: 22px; }
+      li + li { margin-top: 8px; }
       code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-      code { background: #e9eef2; padding: 2px 5px; border-radius: 4px; }
-      pre { overflow-x: auto; padding: 16px; background: #18212b; color: #f5f7f9; border-radius: 6px; }
-      a { color: #075985; }
-      .url { display: block; padding: 14px; background: #fff; border: 1px solid #ccd5dc; border-radius: 6px; overflow-wrap: anywhere; }
-      .notice { padding: 14px 16px; border-left: 4px solid #64748b; background: #e9eef2; }
-      footer { margin-top: 48px; font-size: .9rem; }
+      code { background: #e8edf1; padding: 2px 5px; border-radius: 4px; }
+      pre { overflow-x: auto; padding: 16px; background: #17202a; color: #f7f9fa; border-radius: 6px; white-space: pre-wrap; }
+      a { color: #075d78; text-underline-offset: 2px; }
+      .status { display: inline-block; margin: 0; padding: 3px 8px; border: 1px solid #88a45c; border-radius: 999px; color: #385314; background: #f3f8e9; font-size: .82rem; font-weight: 700; }
+      .lede { max-width: 650px; margin-bottom: 8px; font-size: 1.08rem; }
+      .url { display: block; margin: 12px 0; padding: 14px; background: #fff; border: 1px solid #b8c3cc; border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
+      .notice { padding: 14px 16px; border-left: 4px solid #b06b28; background: #fff6eb; }
+      .independent { padding: 14px 16px; border-left: 4px solid #667985; background: #edf1f4; }
+      .muted { color: #63717d; font-size: .92rem; }
+      footer { margin-top: 42px; padding-top: 18px; border-top: 1px solid #d7dde3; font-size: .9rem; }
+      @media (max-width: 520px) {
+        main { width: min(100% - 24px, 780px); padding-top: 28px; }
+        h1 { font-size: 2rem; }
+      }
     </style>
   </head>
   <body><main>${body}</main></body>
@@ -35,26 +50,37 @@ export const renderHomePage = (baseUrl: string): string => {
   const mcpUrl = new URL("/mcp", baseUrl).toString();
   const escapedUrl = escapeHtml(mcpUrl);
   return documentLayout(
-    "DOAJ Discovery MCP",
-    `<h1>DOAJ Discovery MCP</h1>
-    <p>Read-only journal and article discovery for AI tools through one public MCP connection.</p>
-    <p><strong>No account, no DOAJ API key, no payment.</strong></p>
-    <h2>Public MCP URL</h2>
+    SERVICE_DISPLAY_NAME,
+    `<header>
+      <p class="status">Public beta</p>
+      <h1>${SERVICE_DISPLAY_NAME}</h1>
+      <p class="lede">Search DOAJ-indexed journals and articles from an AI tool through one read-only MCP connection.</p>
+      <p><strong>No account, API key, or payment.</strong></p>
+    </header>
+    <section aria-labelledby="connect">
+    <h2 id="connect">Connect</h2>
+    <p>Paste this URL into an AI client that supports remote Streamable HTTP MCP servers:</p>
     <p class="url"><code>${escapedUrl}</code></p>
-    <h2>Connect</h2>
+    <p class="muted">Availability and menu names depend on the client and plan.</p>
     <ol>
-      <li>Claude: open Settings, Connectors, Add custom connector, then paste the URL.</li>
-      <li>ChatGPT: add a custom MCP app in developer mode, then scan this URL.</li>
-      <li>Codex or another MCP client: configure a remote Streamable HTTP server with this URL.</li>
+      <li><strong>Claude paid plans:</strong> Settings → Connectors → Add custom connector.</li>
+      <li><strong>ChatGPT Business, Enterprise, or Edu:</strong> create a custom MCP app in developer mode under Settings → Apps.</li>
+      <li><strong>Codex or another MCP client:</strong> add a remote Streamable HTTP server.</li>
     </ol>
-    <h2>Try asking</h2>
+    </section>
+    <section aria-labelledby="examples">
+    <h2 id="examples">Try asking</h2>
     <pre>Find diamond open-access journals for climate economics.
 Recommend journals for this manuscript abstract.
 Find articles similar to this research topic.</pre>
-    <h2>What it does</h2>
-    <p>It searches public DOAJ metadata, ranks candidates locally, and returns source links. It does not perform editorial review, compliance checking, or acceptance prediction.</p>
-    <p class="notice"><strong>Independent project:</strong> DOAJ Discovery MCP is an independent, unofficial open-source project. It is not affiliated with, endorsed by, sponsored by, or operated by DOAJ. It uses publicly available DOAJ metadata and APIs for discovery.</p>
-    <footer><a href="/health">Service status</a> · <a href="/privacy">Privacy</a> · <a href="https://github.com/ramiramirez-nl/doaj-discovery-mcp">GitHub</a></footer>`
+    </section>
+    <section aria-labelledby="limits">
+    <h2 id="limits">Scope and limits</h2>
+    <p>It searches public DOAJ metadata, ranks candidates locally, and returns source links. It does not perform editorial review, compliance checking, or acceptance prediction. Verify results on DOAJ and the journal website.</p>
+    <p class="notice"><strong>Privacy:</strong> Do not send confidential manuscript text to this public beta. Requests pass through Google Cloud and the public DOAJ API.</p>
+    <p class="independent"><strong>Independent project:</strong> ${SERVICE_DISPLAY_NAME} is an independent, unofficial open-source project. It is not affiliated with, endorsed by, sponsored by, or operated by DOAJ.</p>
+    </section>
+    <footer><a href="/health">Service status</a> · <a href="/privacy">Privacy</a> · <a href="${REPOSITORY_URL}">GitHub</a> · <a href="${REPOSITORY_URL}/issues">Support</a><br><span class="muted">Version ${SERVICE_VERSION}; public beta, no uptime SLA.</span></footer>`
   );
 };
 
@@ -65,8 +91,10 @@ export const renderPrivacyPage = (): string =>
     <p>DOAJ Discovery MCP is a public, read-only discovery service.</p>
     <h2>What happens to requests</h2>
     <p>Queries and manuscript abstracts are sent to this service and transformed into requests to the public DOAJ API. Query text and abstracts are not intentionally persisted in application logs.</p>
-    <p>A short-lived best-effort cache may exist while a server instance is running. Cache loss does not affect correctness.</p>
+    <p>Production caching is disabled. A self-hosted installation can enable a best-effort cache of public DOAJ responses; cache loss does not affect correctness.</p>
     <h2>What not to send</h2>
-    <p>Do not submit confidential, unpublished, or personally identifying manuscript content. Google Cloud and DOAJ may process network and request metadata under their own policies.</p>
+    <p>Do not submit confidential, unpublished, or personally identifying manuscript content. Google Cloud and DOAJ process network, request, and upstream metadata under their own policies.</p>
+    <h2>Questions</h2>
+    <p>Open a <a href="${REPOSITORY_URL}/issues">GitHub issue</a> for privacy questions or service problems. Do not include sensitive text in an issue.</p>
     <p><a href="/">Back to DOAJ Discovery MCP</a></p>`
   );

@@ -27,6 +27,7 @@
 ### Task 1: Align configuration and DOAJ client with public API use
 
 **Files:**
+
 - Modify: `src/types.ts`
 - Modify: `src/config.ts`
 - Modify: `src/doaj/client.ts`
@@ -35,6 +36,7 @@
 - Modify: `tests/normalize.test.ts` or create `tests/doaj-client.test.ts`
 
 **Interfaces:**
+
 - `loadConfig(env)` continues returning `AppConfig`.
 - `DoajClient` continues exposing `searchJournals`, `searchArticles`, `fetchJournal`, and `fetchArticle`.
 - Add one bounded timeout helper used by all upstream requests.
@@ -82,12 +84,14 @@ git commit -m "fix: use public DOAJ API safely"
 ### Task 2: Make HTTP transport stateless and add public web routes
 
 **Files:**
+
 - Modify: `src/server.ts`
 - Create: `src/http/pages.ts`
 - Create: `tests/server.test.ts`
 - Modify: `package.json` only if a test helper is required
 
 **Interfaces:**
+
 - `startServer(): void` remains the executable entry point.
 - `createMcpServer(): McpServer` remains available to tests.
 - `renderHomePage(baseUrl: string): string` and `renderPrivacyPage(): string` return complete HTML documents.
@@ -138,6 +142,7 @@ git commit -m "feat: add public landing and stateless HTTP routes"
 ### Task 3: Add read-only annotations and abuse controls
 
 **Files:**
+
 - Modify: `src/tools/register.ts`
 - Create: `src/http/rate-limit.ts`
 - Modify: `src/types.ts` if public-limit config fields are added
@@ -146,6 +151,7 @@ git commit -m "feat: add public landing and stateless HTTP routes"
 - Create: `tests/rate-limit.test.ts`
 
 **Interfaces:**
+
 - `createRateLimiter(options): RateLimiter` exposes `allow(key): { allowed: boolean; retryAfterSeconds: number }`.
 - Tool registration continues using the existing `registerDiscoveryTools(server, client, config)` signature.
 
@@ -193,12 +199,14 @@ git commit -m "feat: harden public read-only MCP access"
 ### Task 4: Update public documentation and licensing
 
 **Files:**
+
 - Modify: `README.md`
 - Create: `PRIVACY.md`
 - Create: `LICENSE`
 - Create: `CHANGELOG.md`
 
 **Interfaces:**
+
 - Documentation must match the actual `/mcp`, `/health`, `/privacy`, npm/local, Docker, Claude, ChatGPT, and Codex setup paths.
 
 - [ ] **Step 1: Write the documentation checklist into the README**
@@ -232,6 +240,7 @@ git commit -m "docs: prepare public MCP distribution"
 ### Task 5: Add Cloud Run deployment and GitHub automation
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/deploy-cloud-run.yml`
 - Create: `cloudbuild.yaml` only if required by the chosen deployment path
@@ -239,6 +248,7 @@ git commit -m "docs: prepare public MCP distribution"
 - Modify: `.gitignore` if deployment artifacts require it
 
 **Interfaces:**
+
 - CI validates pull requests and `main`.
 - Deploy workflow publishes the container to Cloud Run project `doaj-discovery-mcp`, region `europe-west1`, service `doaj-discovery-mcp`.
 - Authentication uses GitHub OIDC and Google Workload Identity Federation, never a long-lived service-account JSON key.
@@ -285,11 +295,13 @@ git commit -m "ci: deploy public MCP to Cloud Run"
 ### Task 6: Deploy, smoke-test, and release
 
 **Files:**
+
 - Modify: `README.md` with the real public URL after successful deployment.
 - Modify: `CHANGELOG.md` with the release result.
 - Create: `docs/superpowers/plans/2026-07-29-doaj-public-cloud-service-release-notes.md` only if a separate release record is needed.
 
 **Interfaces:**
+
 - Public endpoint: `https://<cloud-run-service-url>/mcp`.
 - Health endpoint: `https://<cloud-run-service-url>/health`.
 

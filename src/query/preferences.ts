@@ -41,7 +41,11 @@ export const analyzeQueryPreferences = (query: string): QueryPreferences => {
   }
 
   let detectedLanguage: string | undefined;
-  if (/[ıİğĞüÜşŞöÖçÇ]/u.test(query) || normalized.includes("turkiye") || normalized.includes("dergi")) {
+  if (
+    /[ıİğĞüÜşŞöÖçÇ]/u.test(query) ||
+    normalized.includes("turkiye") ||
+    normalized.includes("dergi")
+  ) {
     detectedLanguage = "Turkish";
     preferredLanguages.add("Turkish");
     preferredCountries.add("Turkey");

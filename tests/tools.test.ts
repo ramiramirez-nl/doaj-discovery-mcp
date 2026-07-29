@@ -22,9 +22,15 @@ describe("tools helpers", () => {
   });
 
   test("marks every tool as read-only", () => {
-    const server = createMcpServer(new DoajClient(loadConfig({ ENABLE_CACHE: "false" })), loadConfig());
-    const tools = (server as unknown as { _registeredTools: Record<string, { annotations?: Record<string, boolean> }> })
-      ._registeredTools;
+    const server = createMcpServer(
+      new DoajClient(loadConfig({ ENABLE_CACHE: "false" })),
+      loadConfig()
+    );
+    const tools = (
+      server as unknown as {
+        _registeredTools: Record<string, { annotations?: Record<string, boolean> }>;
+      }
+    )._registeredTools;
 
     expect(Object.keys(tools)).toHaveLength(6);
     for (const tool of Object.values(tools)) {

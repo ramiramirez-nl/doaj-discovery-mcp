@@ -26,6 +26,7 @@ describe("DOAJ normalization", () => {
     expect(journal.languages).toEqual(["English", "Dutch"]);
     expect(journal.hasApc).toBe(false);
     expect(journal.licenses).toEqual(["CC BY"]);
+    expect(journal).not.toHaveProperty("raw");
   });
 
   test("extracts article fields defensively", () => {
@@ -48,5 +49,6 @@ describe("DOAJ normalization", () => {
     expect(article.authors).toEqual(["A. Scholar"]);
     expect(article.links[0]?.url).toBe("https://example.org/article");
     expect(article.publishedYear).toBe(2025);
+    expect(article).not.toHaveProperty("raw");
   });
 });

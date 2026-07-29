@@ -1,8 +1,9 @@
 name: Deploy Cloud Run
 
 on:
-  workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -15,8 +16,13 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
       CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
@@ -24,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -48,11 +56,43 @@ jobs:
             --cpu 1 \
             --timeout 60 \
             --concurrency 20 \
-            --set-env-vars "ENABLE_CACHE=false,LOG_LEVEL=info"
+            --set-env-vars "ENABLE_CACHE=false,TRUST_PROXY=true,BUILD_SHA=$DEPLOY_SHA"
 
-      - name: Show service URL
+      - name: Verify production
         run: |
-          gcloud run services describe "$CLOUD_RUN_SERVICE" \
+          SERVICE_JSON="$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
-            --format='value(status.url)'
+            --format=json)"
+          SERVICE_URL="$(jq --raw-output '.status.url' <<<"$SERVICE_JSON")"
+          LATEST_CREATED="$(jq --raw-output '.status.latestCreatedRevisionName' <<<"$SERVICE_JSON")"
+          LATEST_READY="$(jq --raw-output '.status.latestReadyRevisionName' <<<"$SERVICE_JSON")"
+          TRAFFIC_REVISION="$(jq --raw-output '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty' <<<"$SERVICE_JSON")"
+
+          test "$LATEST_CREATED" = "$LATEST_READY"
+          test "$TRAFFIC_REVISION" = "$LATEST_READY"
+
+          curl --fail --silent --show-error "$SERVICE_URL/" \
+            | grep --quiet "DOAJ Discovery MCP"
+
+          for attempt in {1..12}; do
+            HEALTH="$(curl --fail --silent --show-error "$SERVICE_URL/health")"
+            if jq --exit-status --arg sha "$DEPLOY_SHA" \
+              '.ok == true and .revision == $sha' <<<"$HEALTH" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "Expected revision $DEPLOY_SHA, received: $HEALTH" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          curl --fail --silent --show-error \
+            --request POST "$SERVICE_URL/mcp" \
+            --header "Content-Type: application/json" \
+            --header "Accept: application/json, text/event-stream" \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"deployment-smoke-test","version":"1.0.0"}}}' \
+            | grep --quiet '"result"'
+
+          echo "Production verified: $SERVICE_URL"

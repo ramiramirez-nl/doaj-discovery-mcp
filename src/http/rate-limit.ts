@@ -53,7 +53,10 @@ export const createRateLimiter = (options: RateLimiterOptions): RateLimiter => {
       if (state.count >= maxRequests) {
         return {
           allowed: false,
-          retryAfterSeconds: Math.max(1, Math.ceil((windowMs - (timestamp - state.startedAt)) / 1_000))
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((windowMs - (timestamp - state.startedAt)) / 1_000)
+          )
         };
       }
 

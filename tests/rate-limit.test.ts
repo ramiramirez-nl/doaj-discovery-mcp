@@ -17,7 +17,12 @@ describe("rate limiter", () => {
 
   test("bounds keys and removes stale entries", () => {
     let now = 0;
-    const limiter = createRateLimiter({ maxRequests: 1, windowMs: 1_000, maxKeys: 2, now: () => now });
+    const limiter = createRateLimiter({
+      maxRequests: 1,
+      windowMs: 1_000,
+      maxKeys: 2,
+      now: () => now
+    });
 
     limiter.allow("a".repeat(10_000));
     limiter.allow("b");

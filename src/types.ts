@@ -10,11 +10,10 @@ export interface AppConfig {
   enableCache: boolean;
   cacheDir: string;
   cacheTtlSeconds: number;
-  enableSemanticSearch: boolean;
-  semanticProvider: "none" | "local";
   maxResultsDefault: number;
   maxResultsLimit: number;
-  logLevel: "debug" | "info" | "warn" | "error";
+  trustProxy: boolean;
+  buildSha: string;
   deploymentBaseUrl?: string;
 }
 
@@ -29,7 +28,6 @@ export interface NormalizedJournal {
   licenses: string[];
   hasApc?: boolean;
   url?: string;
-  raw?: unknown;
 }
 
 export interface NormalizedArticle {
@@ -45,7 +43,6 @@ export interface NormalizedArticle {
   subjects: string[];
   publishedYear?: number;
   links: Array<{ url: string; type?: string }>;
-  raw?: unknown;
 }
 
 export type SearchableRecord = {

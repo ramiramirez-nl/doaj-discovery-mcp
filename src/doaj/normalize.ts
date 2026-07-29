@@ -39,7 +39,9 @@ const nested = (record: UnknownRecord): UnknownRecord => {
 const extractIssns = (data: UnknownRecord): string[] => {
   const direct = [...strings(data.issn), ...strings(data.eissn), ...strings(data.pissn)];
   const fromIdentifiers = asArray(data.identifier)
-    .map((item) => (isRecord(item) ? stringValue(item.id) ?? stringValue(item.value) : stringValue(item)))
+    .map((item) =>
+      isRecord(item) ? (stringValue(item.id) ?? stringValue(item.value)) : stringValue(item)
+    )
     .filter((item): item is string => Boolean(item));
   return [...new Set([...direct, ...fromIdentifiers])];
 };
@@ -66,7 +68,8 @@ const extractApc = (data: UnknownRecord): boolean | undefined => {
 export const normalizeJournal = (record: unknown): NormalizedJournal => {
   const root = isRecord(record) ? record : {};
   const data = nested(root);
-  const id = stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-journal";
+  const id =
+    stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-journal";
   const country = stringValue(data.country);
   const url = stringValue(data.url) ?? stringValue(data.homepage);
 
@@ -80,8 +83,7 @@ export const normalizeJournal = (record: unknown): NormalizedJournal => {
     subjects: [...new Set(extractSubjects(data))],
     keywords: strings(data.keywords ?? data.keyword),
     licenses: strings(data.license ?? data.licenses),
-    ...(url ? { url } : {}),
-    raw: record
+    ...(url ? { url } : {})
   };
   if (hasApc !== undefined) normalized.hasApc = hasApc;
   return normalized;
@@ -119,7 +121,8 @@ export const normalizeArticle = (record: unknown): NormalizedArticle => {
   const journalTitle = stringValue(journal.title ?? data.journal_title);
 
   return {
-    id: stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-article",
+    id:
+      stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-article",
     title: stringValue(data.title) ?? "Untitled article",
     ...(abstract ? { abstract } : {}),
     authors: extractAuthors(data),
@@ -130,8 +133,7 @@ export const normalizeArticle = (record: unknown): NormalizedArticle => {
     keywords: strings(data.keywords ?? data.keyword),
     subjects: [...new Set(extractSubjects(data))],
     ...(parsedYear && Number.isFinite(parsedYear) ? { publishedYear: parsedYear } : {}),
-    links: extractLinks(data),
-    raw: record
+    links: extractLinks(data)
   };
 };
 

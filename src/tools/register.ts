@@ -71,13 +71,19 @@ export const registerDiscoveryTools = (
       if (input.language) preferences.preferredLanguages.unshift(input.language);
       const result = await client.searchJournals(input.query, { pageSize: input.limit });
       let records = result.records;
-      if (input.noApcOnly || input.strict) records = records.filter((record) => record.hasApc === false);
+      if (input.noApcOnly || input.strict)
+        records = records.filter((record) => record.hasApc === false);
       if (input.license) {
         records = records.filter((record) =>
-          record.licenses.some((license) => license.toLowerCase().includes(input.license!.toLowerCase()))
+          record.licenses.some((license) =>
+            license.toLowerCase().includes(input.license!.toLowerCase())
+          )
         );
       }
-      const ranked = rankRecords<NormalizedJournal>(input.query, records, preferences).slice(0, input.limit);
+      const ranked = rankRecords<NormalizedJournal>(input.query, records, preferences).slice(
+        0,
+        input.limit
+      );
       return format({ warning: discoveryWarning, warnings: result.warnings, results: ranked });
     }
   );
@@ -105,7 +111,8 @@ export const registerDiscoveryTools = (
     "recommend_doaj_journals_for_manuscript",
     {
       title: "Recommend DOAJ journals for manuscript fit",
-      description: "Suggest discovery candidates for a manuscript abstract or topic; not an acceptance prediction.",
+      description:
+        "Suggest discovery candidates for a manuscript abstract or topic; not an acceptance prediction.",
       annotations: doajReadOnlyAnnotations,
       inputSchema: {
         abstract: z.string().min(20).max(12_000),
@@ -125,7 +132,10 @@ export const registerDiscoveryTools = (
       const records = input.noApcOnly
         ? result.records.filter((record) => record.hasApc === false)
         : result.records;
-      const ranked = rankRecords<NormalizedJournal>(query, records, preferences).slice(0, input.limit);
+      const ranked = rankRecords<NormalizedJournal>(query, records, preferences).slice(
+        0,
+        input.limit
+      );
       return format({
         warning: `${discoveryWarning} Journal recommendations are manuscript-fit discovery candidates, not editorial decisions.`,
         warnings: result.warnings,
@@ -170,10 +180,11 @@ export const registerDiscoveryTools = (
     async (input) => {
       const query = [input.title, input.abstract].filter(Boolean).join(" ");
       const result = await client.searchArticles(query, { pageSize: input.limit });
-      const ranked = rankRecords<NormalizedArticle>(query, result.records, analyzeQueryPreferences(query)).slice(
-        0,
-        input.limit
-      );
+      const ranked = rankRecords<NormalizedArticle>(
+        query,
+        result.records,
+        analyzeQueryPreferences(query)
+      ).slice(0, input.limit);
       return format({
         warning: discoveryWarning,
         warnings: [semanticFallbackWarning(), ...result.warnings],
@@ -186,7 +197,8 @@ export const registerDiscoveryTools = (
     "explain_doaj_metadata",
     {
       title: "Explain DOAJ metadata",
-      description: "Explain DOAJ metadata terms such as APC, license, language, ISSN, or diamond OA.",
+      description:
+        "Explain DOAJ metadata terms such as APC, license, language, ISSN, or diamond OA.",
       annotations: localReadOnlyAnnotations,
       inputSchema: { term: z.string().min(1).max(200) }
     },
