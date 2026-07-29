@@ -18,20 +18,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Verify
+        run: npm run check
 
-      - name: Build
-        run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Build container
+      - name: Build production container
         run: docker build --tag doaj-discovery-mcp:ci .
