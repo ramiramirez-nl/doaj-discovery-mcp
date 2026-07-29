@@ -1,43 +1,17 @@
 import type { QueryPreferences } from "../types.js";
 import { normalizeText } from "../search/text.js";
-
-const COUNTRY_ALIASES: Record<string, string> = {
-  netherlands: "Netherlands",
-  turkey: "Turkey",
-  turkiye: "Turkey",
-  türkiye: "Turkey",
-  "united kingdom": "United Kingdom",
-  uk: "United Kingdom",
-  usa: "United States",
-  "united states": "United States",
-  germany: "Germany",
-  france: "France",
-  brazil: "Brazil"
-};
-
-const LANGUAGE_ALIASES: Record<string, string> = {
-  english: "English",
-  turkish: "Turkish",
-  türkçe: "Turkish",
-  turkce: "Turkish",
-  dutch: "Dutch",
-  french: "French",
-  german: "German",
-  portuguese: "Portuguese",
-  arabic: "Arabic",
-  kurdish: "Kurdish"
-};
+import { countryAliases, languageAliases } from "../doaj/codes.js";
 
 export const analyzeQueryPreferences = (query: string): QueryPreferences => {
   const normalized = normalizeText(query);
   const preferredCountries = new Set<string>();
   const preferredLanguages = new Set<string>();
 
-  for (const [alias, country] of Object.entries(COUNTRY_ALIASES)) {
-    if (normalized.includes(normalizeText(alias))) preferredCountries.add(country);
+  for (const { alias, name } of countryAliases) {
+    if (normalized.includes(normalizeText(alias))) preferredCountries.add(name);
   }
-  for (const [alias, language] of Object.entries(LANGUAGE_ALIASES)) {
-    if (normalized.includes(normalizeText(alias))) preferredLanguages.add(language);
+  for (const { alias, name } of languageAliases) {
+    if (normalized.includes(normalizeText(alias))) preferredLanguages.add(name);
   }
 
   let detectedLanguage: string | undefined;
@@ -54,7 +28,6 @@ export const analyzeQueryPreferences = (query: string): QueryPreferences => {
   return {
     ...(detectedLanguage ? { detectedLanguage } : {}),
     preferredLanguages: [...preferredLanguages],
-    preferredCountries: [...preferredCountries],
-    strictFilters: /\b(only|strictly|exclusively|must be|must publish)\b/i.test(query)
+    preferredCountries: [...preferredCountries]
   };
 };

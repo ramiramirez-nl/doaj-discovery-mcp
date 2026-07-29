@@ -1,6 +1,5 @@
 import { createCacheKey } from "../cache/keys.js";
 import type { CacheStore } from "../cache/store.js";
-import { buildDoajQuery } from "../search/text.js";
 import type {
   AppConfig,
   DoajSearchResult,
@@ -9,15 +8,28 @@ import type {
 } from "../types.js";
 import { extractResults, extractTotal, normalizeArticle, normalizeJournal } from "./normalize.js";
 
-interface SearchOptions {
+const MAX_PAGE_SIZE = 100;
+const MAX_RETRIES = 2;
+const BASE_BACKOFF_MS = 300;
+
+export interface SearchOptions {
   page?: number;
   pageSize?: number;
+  sort?: string;
 }
 
 const hasResultCollection = (payload: unknown): boolean => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const record = payload as Record<string, unknown>;
   return ["results", "records", "data", "items"].some((key) => Array.isArray(record[key]));
+};
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parseRetryAfterMs = (value: string | null): number | undefined => {
+  if (!value) return undefined;
+  const seconds = Number.parseFloat(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : undefined;
 };
 
 export class DoajClient {
@@ -40,35 +52,20 @@ export class DoajClient {
     return this.search("search/articles", query, options, normalizeArticle);
   }
 
-  async fetchJournal(id: string): Promise<DoajSearchResult<NormalizedJournal>> {
-    return this.fetchOne(`journals/${encodeURIComponent(id)}`, normalizeJournal);
-  }
-
-  async fetchArticle(id: string): Promise<DoajSearchResult<NormalizedArticle>> {
-    return this.fetchOne(`articles/${encodeURIComponent(id)}`, normalizeArticle);
-  }
-
-  private async search<T>(
+  private search<T>(
     path: string,
     query: string,
     options: SearchOptions,
     normalize: (record: unknown) => T
   ): Promise<DoajSearchResult<T>> {
-    const boundedQuery = buildDoajQuery(query);
     const url = new URL(
-      `${this.config.doajApiBaseUrl.replace(/\/$/, "")}/${path}/${encodeURIComponent(boundedQuery)}`
+      `${this.config.doajApiBaseUrl.replace(/\/$/, "")}/${path}/${encodeURIComponent(query)}`
     );
+    const pageSize = Math.min(options.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+    url.searchParams.set("pageSize", String(pageSize));
     if (options.page) url.searchParams.set("page", String(options.page));
-    if (options.pageSize) url.searchParams.set("pageSize", String(options.pageSize));
+    if (options.sort) url.searchParams.set("sort", options.sort);
     return this.request(url, normalize);
-  }
-
-  private async fetchOne<T>(
-    path: string,
-    normalize: (record: unknown) => T
-  ): Promise<DoajSearchResult<T>> {
-    const url = new URL(`${this.config.doajApiBaseUrl.replace(/\/$/, "")}/${path}`);
-    return this.request(url, (record) => normalize(record));
   }
 
   private async request<T>(
@@ -85,60 +82,21 @@ export class DoajClient {
       }
     }
 
-    const headers: Record<string, string> = { accept: "application/json" };
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(this.config.doajRequestTimeoutMs)
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error && error.name === "TimeoutError"
-          ? "DOAJ request timed out. Try again later."
-          : "DOAJ request failed. Try again later.";
-      return { records: [], warnings: [message] };
-    }
-    const warnings: string[] = [];
-    if (response.status === 429) {
-      const retryAfter = response.headers.get("retry-after");
-      warnings.push(
-        `DOAJ rate limit reached.${retryAfter ? ` Retry after ${retryAfter} seconds.` : ""}`
-      );
-    }
-    if (!response.ok) {
-      return { records: [], warnings: [...warnings, `DOAJ API returned HTTP ${response.status}.`] };
+    const result = await this.fetchWithRetry(url);
+
+    if (result.records === undefined) {
+      return { records: [], warnings: result.warnings };
     }
 
-    const contentType = response.headers.get("content-type");
-    if (contentType && !contentType.toLowerCase().includes("application/json")) {
-      return {
-        records: [],
-        warnings: ["DOAJ returned an invalid response. Try again later."]
-      };
-    }
-
-    let payload: unknown;
-    try {
-      payload = (await response.json()) as unknown;
-    } catch {
-      return {
-        records: [],
-        warnings: ["DOAJ returned an invalid response. Try again later."]
-      };
-    }
-    const results = extractResults(payload);
-    const sourceRecords = hasResultCollection(payload) ? results : [payload];
-    const total = extractTotal(payload);
-    const result: DoajSearchResult<T> = {
-      records: sourceRecords.map(normalize),
-      warnings
+    const finalResult: DoajSearchResult<T> = {
+      records: result.records.map(normalize),
+      warnings: result.warnings
     };
-    if (total !== undefined) result.total = total;
+    if (result.total !== undefined) finalResult.total = result.total;
 
     if (this.config.enableCache && this.cache) {
       try {
-        await this.cache.set(key, result, {
+        await this.cache.set(key, finalResult, {
           ttlSeconds: this.config.cacheTtlSeconds,
           source: "doaj-api",
           payloadVersion: 1
@@ -147,6 +105,71 @@ export class DoajClient {
         // Cache availability must not affect discovery.
       }
     }
-    return result;
+    return finalResult;
+  }
+
+  private async fetchWithRetry(
+    url: URL
+  ): Promise<{ records?: unknown[]; total?: number; warnings: string[] }> {
+    let lastWarnings: string[] = [];
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          headers: { accept: "application/json" },
+          signal: AbortSignal.timeout(this.config.doajRequestTimeoutMs)
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error && error.name === "TimeoutError"
+            ? "DOAJ request timed out. Try again later."
+            : "DOAJ request failed. Try again later.";
+        lastWarnings = [message];
+        if (attempt < MAX_RETRIES) {
+          await sleep(BASE_BACKOFF_MS * 2 ** attempt + Math.random() * 100);
+          continue;
+        }
+        return { warnings: lastWarnings };
+      }
+
+      if (response.status === 429 || response.status >= 500) {
+        const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+        const retryAfterSeconds = response.headers.get("retry-after");
+        lastWarnings = [
+          response.status === 429
+            ? `DOAJ rate limit reached.${retryAfterSeconds ? ` Retry after ${retryAfterSeconds} seconds.` : ""}`
+            : `DOAJ API returned HTTP ${response.status}.`
+        ];
+        if (attempt < MAX_RETRIES) {
+          await sleep(retryAfterMs ?? BASE_BACKOFF_MS * 2 ** attempt + Math.random() * 100);
+          continue;
+        }
+        return { warnings: lastWarnings };
+      }
+
+      if (!response.ok) {
+        return { warnings: [`DOAJ API returned HTTP ${response.status}.`] };
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && !contentType.toLowerCase().includes("application/json")) {
+        return { warnings: ["DOAJ returned an invalid response. Try again later."] };
+      }
+
+      let payload: unknown;
+      try {
+        payload = (await response.json()) as unknown;
+      } catch {
+        return { warnings: ["DOAJ returned an invalid response. Try again later."] };
+      }
+
+      const results = extractResults(payload);
+      const records = hasResultCollection(payload) ? results : [payload];
+      const total = extractTotal(payload);
+      return { records, ...(total !== undefined ? { total } : {}), warnings: [] };
+    }
+
+    return { warnings: lastWarnings };
   }
 }

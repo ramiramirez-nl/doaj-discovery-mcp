@@ -27,7 +27,7 @@ describe("DoajClient public requests", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
-  test("bounds the query placed in the DOAJ URL", async () => {
+  test("clamps pageSize to the DOAJ-documented maximum of 100", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ total: 0, results: [] }), {
         status: 200,
@@ -37,10 +37,40 @@ describe("DoajClient public requests", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new DoajClient(loadConfig({ ENABLE_CACHE: "false" }));
-    await client.searchJournals("climate adaptation ".repeat(700));
+    await client.searchJournals("medicine", { pageSize: 500 });
 
     const [calledUrl] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(decodeURIComponent(calledUrl.pathname).length).toBeLessThan(600);
+    expect(calledUrl.searchParams.get("pageSize")).toBe("100");
+  });
+
+  test("retries once on a 429 and succeeds on the following attempt", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "retry-after": "0" } }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ total: 0, results: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new DoajClient(loadConfig({ ENABLE_CACHE: "false" }));
+    const result = await client.searchJournals("medicine");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.warnings).toEqual([]);
+    expect(result.records).toEqual([]);
+  });
+
+  test("does not double-report warnings for a persistent 429", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
+
+    const client = new DoajClient(loadConfig({ ENABLE_CACHE: "false" }));
+    const result = await client.searchJournals("medicine");
+
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("rate limit");
   });
 
   test("returns a safe warning for an invalid DOAJ response", async () => {

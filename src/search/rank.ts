@@ -24,6 +24,28 @@ const weights: Record<string, number> = {
   licenses: 0.8
 };
 
+/**
+ * Inverse document frequency across the fetched candidate pool. Without this, a query built
+ * from an abstract is dominated by whichever single common term (e.g. "networks") happens to
+ * appear in a short journal title, while the distinctive terms that actually identify the topic
+ * contribute no more than the generic ones.
+ */
+const inverseDocumentFrequencies = (
+  uniqueTokens: string[],
+  recordTokenSets: Array<Set<string>>
+): Map<string, number> => {
+  const total = recordTokenSets.length;
+  const idf = new Map<string, number>();
+  for (const token of uniqueTokens) {
+    const documentFrequency = recordTokenSets.reduce(
+      (count, tokens) => (tokens.has(token) ? count + 1 : count),
+      0
+    );
+    idf.set(token, Math.log(1 + total / (1 + documentFrequency)));
+  }
+  return idf;
+};
+
 export const rankRecords = <T extends SearchableRecord>(
   query: string,
   records: T[],
@@ -36,20 +58,27 @@ export const rankRecords = <T extends SearchableRecord>(
     expandedQueryText(query)
   );
 
+  const recordFields = records.map((record) => fieldText(record));
+  const recordTokenSets = recordFields.map(
+    (fields) => new Set(tokenize(Object.values(fields).join(" ")))
+  );
+  const idf = inverseDocumentFrequencies(uniqueTokens, recordTokenSets);
+
   return records
-    .map((record) => {
+    .map((record, index) => {
       let score = 0;
       const reasons: string[] = [];
-      const fields = fieldText(record);
+      const fields = recordFields[index] ?? fieldText(record);
 
       for (const [field, value] of Object.entries(fields)) {
         const normalized = normalizeText(value);
         const tokens = tokenize(value);
         if (!normalized) continue;
         const lengthNorm = Math.sqrt(tokens.length + 1);
-        const matches = uniqueTokens.filter((token) => tokens.includes(token)).length;
-        if (matches > 0) {
-          score += (matches / lengthNorm) * (weights[field] ?? 1);
+        const matched = uniqueTokens.filter((token) => tokens.includes(token));
+        if (matched.length > 0) {
+          const weightedMatches = matched.reduce((sum, token) => sum + (idf.get(token) ?? 1), 0);
+          score += (weightedMatches / lengthNorm) * (weights[field] ?? 1);
           reasons.push(`${field} match`);
         }
         if (phrase && normalized.includes(phrase)) {
