@@ -13,6 +13,7 @@
 ### Task 1: Project Skeleton
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `vitest.config.ts`
@@ -38,6 +39,7 @@ Use Node 20 Alpine, install dependencies, build TypeScript, and run `dist/server
 ### Task 2: Core Types and Config
 
 **Files:**
+
 - Create: `src/config.ts`
 - Create: `src/types.ts`
 - Test: `tests/config.test.ts`
@@ -53,6 +55,7 @@ Parse env defensively and clamp `MAX_RESULTS_DEFAULT` to `MAX_RESULTS_LIMIT`.
 ### Task 3: Cache Layer
 
 **Files:**
+
 - Create: `src/cache/store.ts`
 - Create: `src/cache/file-cache-store.ts`
 - Create: `src/cache/keys.ts`
@@ -69,6 +72,7 @@ Use filesystem JSON files with SHA-256 key filenames and a swappable `CacheStore
 ### Task 4: DOAJ Client and Normalization
 
 **Files:**
+
 - Create: `src/doaj/client.ts`
 - Create: `src/doaj/normalize.ts`
 - Test: `tests/normalize.test.ts`
@@ -88,6 +92,7 @@ Support search/fetch journals and articles, pagination, optional API key header,
 ### Task 5: Lexical Ranking and Query Analysis
 
 **Files:**
+
 - Create: `src/search/text.ts`
 - Create: `src/search/synonyms.ts`
 - Create: `src/search/rank.ts`
@@ -107,6 +112,7 @@ Use BM25-like scoring over candidate records plus conservative synonym expansion
 ### Task 6: MCP Tools and HTTP Server
 
 **Files:**
+
 - Create: `src/tools/explain.ts`
 - Create: `src/tools/journals.ts`
 - Create: `src/tools/articles.ts`
@@ -129,6 +135,7 @@ Expose `/health` and `/mcp` using Streamable HTTP transport from MCP SDK.
 ### Task 7: Verification
 
 **Files:**
+
 - Modify as needed based on verification failures.
 
 - [ ] **Step 1: Run tests**

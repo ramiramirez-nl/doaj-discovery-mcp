@@ -27,4 +27,5 @@ export const expandSynonyms = (query: string): string[] => {
   return [...expansions];
 };
 
-export const expandedQueryText = (query: string): string => [query, ...expandSynonyms(query)].join(" ");
+export const expandedQueryText = (query: string): string =>
+  [query, ...expandSynonyms(query)].join(" ");

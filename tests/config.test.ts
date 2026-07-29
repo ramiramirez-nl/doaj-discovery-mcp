@@ -13,8 +13,11 @@ describe("loadConfig", () => {
     expect(config.rateLimitMaxRequests).toBe(120);
     expect(config.rateLimitWindowSeconds).toBe(60);
     expect(config.maxRequestBodyBytes).toBe(100_000);
-    expect(config.enableSemanticSearch).toBe(false);
-    expect(config.semanticProvider).toBe("none");
+    expect(config.trustProxy).toBe(false);
+    expect(config.buildSha).toBe("development");
+    expect("enableSemanticSearch" in config).toBe(false);
+    expect("semanticProvider" in config).toBe(false);
+    expect("logLevel" in config).toBe(false);
     expect(Object.keys(config).some((key) => key.toLowerCase().includes("openai"))).toBe(false);
   });
 
@@ -26,9 +29,14 @@ describe("loadConfig", () => {
   });
 
   test("ignores DOAJ API keys and clamps request timeout", () => {
-    const config = loadConfig({ DOAJ_API_KEY: "not-used", DOAJ_REQUEST_TIMEOUT_MS: "500" });
+    const config = loadConfig({
+      BUILD_SHA: "abc123",
+      DOAJ_API_KEY: "not-used",
+      DOAJ_REQUEST_TIMEOUT_MS: "500"
+    });
 
     expect("doajApiKey" in config).toBe(false);
     expect(config.doajRequestTimeoutMs).toBe(1_000);
+    expect(config.buildSha).toBe("abc123");
   });
 });

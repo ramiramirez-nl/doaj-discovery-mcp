@@ -1,40 +1,81 @@
-# Cloud Run Setup
+# Cloud Run Operations
 
-This repository is ready for a public Cloud Run deployment. The deploy workflow uses GitHub Actions OIDC and Google Workload Identity Federation; no service-account JSON key is stored in GitHub.
+Production service:
+
+```text
+https://doaj-discovery-mcp-hbyczavkfq-ew.a.run.app
+```
+
+The GitHub Actions deployment uses Google Workload Identity Federation. No service-account JSON
+key is stored in GitHub.
 
 ## One-Time Google Cloud Setup
 
-In the Google Cloud project `doaj-discovery-mcp`:
+Project: `doaj-discovery-mcp`; region: `europe-west1`.
 
-1. Enable Cloud Run, Cloud Build, Artifact Registry, and IAM Credentials APIs.
-2. Create a Workload Identity Pool and GitHub provider restricted to the repository `ramiramirez-nl/doaj-discovery-mcp`.
-3. Create a deployer service account with the minimum Cloud Run deployment permissions needed by the project.
-4. Allow the GitHub principal to impersonate that service account.
+1. Enable Cloud Run, Cloud Build, Artifact Registry, IAM Credentials, and Service Usage APIs.
+2. Create a Workload Identity Pool and GitHub provider restricted to
+   `ramiramirez-nl/doaj-discovery-mcp`.
+3. Create `github-deployer@doaj-discovery-mcp.iam.gserviceaccount.com`.
+4. Grant only the deployment, build, Artifact Registry write, service-account use, and service
+   usage roles required by the workflow.
+5. Allow the repository principal to impersonate the deployer through
+   `roles/iam.workloadIdentityUser`.
 
-The exact Google Cloud Console labels can change. Use the official Workload Identity Federation setup guide when creating the GitHub provider.
+The deployer is also the explicit Cloud Build service account. This avoids relying on the default
+Compute Engine service account.
 
 ## GitHub Repository Variables
 
-Add these repository variables under **Settings > Secrets and variables > Actions > Variables**:
+Configure these under **Settings → Secrets and variables → Actions → Variables**:
 
-| Variable                         | Value                          |
-| -------------------------------- | ------------------------------ |
-| `GCP_PROJECT_ID`                 | `doaj-discovery-mcp`           |
-| `GCP_REGION`                     | `europe-west1`                 |
-| `CLOUD_RUN_SERVICE`              | `doaj-discovery-mcp`           |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full provider resource name    |
-| `GCP_DEPLOYER_SERVICE_ACCOUNT`   | Deployer service-account email |
+| Variable                         | Value                                                            |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `GCP_PROJECT_ID`                 | `doaj-discovery-mcp`                                             |
+| `GCP_REGION`                     | `europe-west1`                                                   |
+| `CLOUD_RUN_SERVICE`              | `doaj-discovery-mcp`                                             |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full `projects/.../workloadIdentityPools/.../providers/...` name |
+| `GCP_DEPLOYER_SERVICE_ACCOUNT`   | `github-deployer@doaj-discovery-mcp.iam.gserviceaccount.com`     |
 
-After this one-time setup, pushes to `main` deploy automatically. The workflow makes the service public and prints the generated HTTPS URL. Add `/mcp` to that URL in an AI client.
+CI verifies every `main` commit. The deploy workflow runs only after that CI run succeeds, checks
+out the same commit, deploys it, and verifies the live landing, health, MCP, traffic, and exact
+commit identity. There is no manual production bypass.
+
+## Runtime Controls
+
+Production uses:
+
+- request-based billing;
+- zero minimum and one maximum instance;
+- one CPU and 512 MiB memory;
+- concurrency 20 and timeout 60 seconds;
+- `ENABLE_CACHE=false`;
+- `TRUST_PROXY=true`;
+- workflow-managed `BUILD_SHA`.
+
+`TRUST_PROXY=true` is for Cloud Run only. It makes the application rate-limit the verified client
+address immediately before Google Cloud's load-balancer address, ignoring spoofable prefixes.
+`BUILD_SHA` is exposed by `/health` so deployment verification can prove which commit receives
+production traffic.
 
 ## Cost Controls
 
-The service is configured for scale-to-zero, one maximum instance, one CPU, 512 MiB memory, and request-based billing. Add a Google Cloud budget alert before sharing the URL. A budget alert notifies you; it is not a guaranteed hard spending cap.
+Create two monthly billing controls:
+
+1. **TRY 500 spend cap:** single project `doaj-discovery-mcp`, single service Cloud Run. Google
+   automatically notifies billing administrators and project owners at 50%, 80%, and 100%, then
+   pauses new Cloud Run usage when enforcement catches up.
+2. **TRY 500 alerts-only budget:** the whole project and all services. This covers Cloud Build,
+   Artifact Registry, and other costs outside the Cloud Run cap.
+
+Spend enforcement and billing reports can lag, so small overages remain possible. The Cloud Run
+cap uses gross eligible costs and can pause the service even while promotional credits cover the
+bill.
 
 ## Verify
 
 ```bash
-curl https://YOUR-CLOUD-RUN-URL/health
+curl --fail https://doaj-discovery-mcp-hbyczavkfq-ew.a.run.app/health
 ```
 
-The landing page is at `/`, the MCP endpoint is `/mcp`, and the privacy statement is at `/privacy`.
+The landing page is `/`, privacy is `/privacy`, and the public MCP endpoint is `/mcp`.

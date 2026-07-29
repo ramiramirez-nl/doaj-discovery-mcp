@@ -64,7 +64,9 @@ export const rankRecords = <T extends SearchableRecord>(
       }
 
       for (const language of preferences.preferredLanguages ?? []) {
-        if ((record.languages ?? []).some((item) => normalizeText(item) === normalizeText(language))) {
+        if (
+          (record.languages ?? []).some((item) => normalizeText(item) === normalizeText(language))
+        ) {
           score += 4;
           reasons.push(`language ${language}`);
         }

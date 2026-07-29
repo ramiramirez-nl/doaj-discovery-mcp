@@ -11,11 +11,6 @@ const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 };
 
-const readLogLevel = (value: string | undefined): AppConfig["logLevel"] => {
-  if (value === "debug" || value === "info" || value === "warn" || value === "error") return value;
-  return "info";
-};
-
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   const maxResultsLimit = Math.max(1, readNumber(env.MAX_RESULTS_LIMIT, 25));
   const requestedDefault = Math.max(1, readNumber(env.MAX_RESULTS_DEFAULT, 10));
@@ -31,11 +26,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     enableCache: readBoolean(env.ENABLE_CACHE, true),
     cacheDir: env.CACHE_DIR || ".cache/doaj",
     cacheTtlSeconds: Math.max(0, readNumber(env.CACHE_TTL_SECONDS, 86_400)),
-    enableSemanticSearch: readBoolean(env.ENABLE_SEMANTIC_SEARCH, false),
-    semanticProvider: env.SEMANTIC_PROVIDER === "local" ? "local" : "none",
     maxResultsDefault: Math.min(requestedDefault, maxResultsLimit),
     maxResultsLimit,
-    logLevel: readLogLevel(env.LOG_LEVEL),
+    trustProxy: readBoolean(env.TRUST_PROXY, false),
+    buildSha: env.BUILD_SHA?.trim().slice(0, 64) || "development",
     ...(deploymentBaseUrl ? { deploymentBaseUrl } : {})
   };
 };
