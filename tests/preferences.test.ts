@@ -10,7 +10,6 @@ describe("query preferences", () => {
 
     expect(preferences.preferredCountries).toContain("Netherlands");
     expect(preferences.preferredLanguages).toContain("English");
-    expect(preferences.strictFilters).toBe(false);
   });
 
   test("detects Turkish query language locally", () => {

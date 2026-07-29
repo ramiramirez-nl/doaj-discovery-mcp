@@ -1,4 +1,5 @@
 import type { NormalizedArticle, NormalizedJournal, UnknownRecord } from "../types.js";
+import { countryCodeToName, languageCodeToName } from "./codes.js";
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -37,7 +38,12 @@ const nested = (record: UnknownRecord): UnknownRecord => {
 };
 
 const extractIssns = (data: UnknownRecord): string[] => {
-  const direct = [...strings(data.issn), ...strings(data.eissn), ...strings(data.pissn)];
+  const direct = [
+    ...strings(data.issn),
+    ...strings(data.eissn),
+    ...strings(data.pissn),
+    ...strings(data.issns)
+  ];
   const fromIdentifiers = asArray(data.identifier)
     .map((item) =>
       isRecord(item) ? (stringValue(item.id) ?? stringValue(item.value)) : stringValue(item)
@@ -46,13 +52,10 @@ const extractIssns = (data: UnknownRecord): string[] => {
   return [...new Set([...direct, ...fromIdentifiers])];
 };
 
-const extractSubjects = (data: UnknownRecord): string[] => [
-  ...strings(data.subject),
-  ...strings(data.subjects),
-  ...asArray(data.subject)
-    .flatMap((item) => (isRecord(item) ? strings(item.term ?? item.code) : []))
-    .filter(Boolean)
-];
+const extractSubjects = (data: UnknownRecord): string[] =>
+  asArray(data.subject ?? data.subjects)
+    .flatMap((item) => (isRecord(item) ? strings(item.term ?? item.code) : strings(item)))
+    .filter(Boolean);
 
 const extractApc = (data: UnknownRecord): boolean | undefined => {
   const apc = data.apc;
@@ -65,25 +68,68 @@ const extractApc = (data: UnknownRecord): boolean | undefined => {
   return undefined;
 };
 
+const extractPublisherName = (data: UnknownRecord): string | undefined => {
+  const publisher = data.publisher;
+  if (typeof publisher === "string") return stringValue(publisher);
+  if (isRecord(publisher)) return stringValue(publisher.name);
+  return undefined;
+};
+
+const extractCountryCode = (data: UnknownRecord): string | undefined => {
+  const publisher = data.publisher;
+  if (isRecord(publisher) && stringValue(publisher.country)) return stringValue(publisher.country);
+  return stringValue(data.country);
+};
+
+const extractJournalHomepage = (data: UnknownRecord): string | undefined => {
+  const ref = data.ref;
+  if (isRecord(ref)) {
+    const url = stringValue(ref.journal) ?? stringValue(ref.oa_statement);
+    if (url) return url;
+  }
+  return stringValue(data.url) ?? stringValue(data.homepage);
+};
+
+const extractLanguageCodes = (data: UnknownRecord): string[] =>
+  strings(data.language ?? data.languages).map((code) => code.toUpperCase());
+
+const resolveLanguageNames = (codes: string[]): string[] =>
+  codes.map((code) => languageCodeToName(code) ?? code);
+
+const extractIdentifierValue = (data: UnknownRecord, type: string): string | undefined => {
+  const match = asArray(data.identifier).find(
+    (item) => isRecord(item) && stringValue(item.type)?.toLowerCase() === type
+  );
+  return isRecord(match) ? stringValue(match.id) : undefined;
+};
+
 export const normalizeJournal = (record: unknown): NormalizedJournal => {
   const root = isRecord(record) ? record : {};
   const data = nested(root);
+  const issns = extractIssns(data);
   const id =
     stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-journal";
-  const country = stringValue(data.country);
-  const url = stringValue(data.url) ?? stringValue(data.homepage);
+  const countryCode = extractCountryCode(data);
+  const country = countryCode ? (countryCodeToName(countryCode) ?? countryCode) : undefined;
+  const publisher = extractPublisherName(data);
+  const url = extractJournalHomepage(data);
+  const languageCodes = extractLanguageCodes(data);
 
   const hasApc = extractApc(data);
   const normalized: NormalizedJournal = {
     id,
     title: stringValue(data.title) ?? "Untitled journal",
-    issns: extractIssns(data),
+    issns,
     ...(country ? { country } : {}),
-    languages: strings(data.language ?? data.languages),
+    ...(countryCode ? { countryCode } : {}),
+    ...(publisher ? { publisher } : {}),
+    languages: resolveLanguageNames(languageCodes),
+    languageCodes,
     subjects: [...new Set(extractSubjects(data))],
     keywords: strings(data.keywords ?? data.keyword),
     licenses: strings(data.license ?? data.licenses),
-    ...(url ? { url } : {})
+    ...(url ? { url } : {}),
+    ...(issns[0] ? { doajUrl: `https://doaj.org/toc/${issns[0]}` } : {})
   };
   if (hasApc !== undefined) normalized.hasApc = hasApc;
   return normalized;
@@ -116,23 +162,33 @@ export const normalizeArticle = (record: unknown): NormalizedArticle => {
   const journal = isRecord(data.journal) ? data.journal : {};
   const yearRaw = stringValue(data.year ?? data.published_date ?? data.publicationDate);
   const parsedYear = yearRaw ? Number.parseInt(yearRaw.slice(0, 4), 10) : undefined;
-  const country = stringValue(journal.country ?? data.country);
+  const countryCode = stringValue(journal.country) ?? extractCountryCode(data);
+  const country = countryCode ? (countryCodeToName(countryCode) ?? countryCode) : undefined;
   const abstract = stringValue(data.abstract);
   const journalTitle = stringValue(journal.title ?? data.journal_title);
+  const journalIssns = extractIssns(journal);
+  const languageCodes = extractLanguageCodes(journal).length
+    ? extractLanguageCodes(journal)
+    : extractLanguageCodes(data);
+  const doi = extractIdentifierValue(data, "doi");
+  const articleId = stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title);
 
   return {
-    id:
-      stringValue(root.id) ?? stringValue(data.id) ?? stringValue(data.title) ?? "unknown-article",
+    id: articleId ?? "unknown-article",
     title: stringValue(data.title) ?? "Untitled article",
     ...(abstract ? { abstract } : {}),
     authors: extractAuthors(data),
     ...(journalTitle ? { journalTitle } : {}),
-    journalIssns: extractIssns(journal),
+    journalIssns,
     ...(country ? { country } : {}),
-    languages: strings(data.language ?? data.languages),
+    ...(countryCode ? { countryCode } : {}),
+    languages: resolveLanguageNames(languageCodes),
+    languageCodes,
     keywords: strings(data.keywords ?? data.keyword),
     subjects: [...new Set(extractSubjects(data))],
     ...(parsedYear && Number.isFinite(parsedYear) ? { publishedYear: parsedYear } : {}),
+    ...(doi ? { doi } : {}),
+    ...(articleId ? { doajUrl: `https://doaj.org/article/${articleId}` } : {}),
     links: extractLinks(data)
   };
 };

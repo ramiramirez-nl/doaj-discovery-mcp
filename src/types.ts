@@ -22,12 +22,16 @@ export interface NormalizedJournal {
   title: string;
   issns: string[];
   country?: string;
+  countryCode?: string;
+  publisher?: string;
   languages: string[];
+  languageCodes: string[];
   subjects: string[];
   keywords: string[];
   licenses: string[];
   hasApc?: boolean;
   url?: string;
+  doajUrl?: string;
 }
 
 export interface NormalizedArticle {
@@ -38,10 +42,14 @@ export interface NormalizedArticle {
   journalTitle?: string;
   journalIssns: string[];
   country?: string;
+  countryCode?: string;
   languages: string[];
+  languageCodes: string[];
   keywords: string[];
   subjects: string[];
   publishedYear?: number;
+  doi?: string;
+  doajUrl?: string;
   links: Array<{ url: string; type?: string }>;
 }
 
@@ -52,7 +60,9 @@ export type SearchableRecord = {
   keywords?: string[];
   subjects?: string[];
   country?: string;
+  countryCode?: string;
   languages?: string[];
+  languageCodes?: string[];
   licenses?: string[];
   hasApc?: boolean;
   journalTitle?: string;
@@ -62,7 +72,6 @@ export interface QueryPreferences {
   detectedLanguage?: string;
   preferredLanguages: string[];
   preferredCountries: string[];
-  strictFilters: boolean;
 }
 
 export interface RankedRecord<T extends SearchableRecord> {
@@ -75,10 +84,4 @@ export interface DoajSearchResult<T> {
   records: T[];
   total?: number;
   warnings: string[];
-}
-
-export interface DoajError {
-  message: string;
-  status?: number;
-  retryAfterSeconds?: number;
 }
