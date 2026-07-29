@@ -55,6 +55,10 @@ docker run --rm -p 3000:3000 --env-file .env doaj-discovery-mcp
 
 The container honors the `PORT` environment variable supplied by Cloud Run or another host.
 
+## Deploy To Cloud Run
+
+The repository includes an automatic GitHub Actions deployment using Workload Identity Federation. Follow [docs/CLOUD_RUN.md](docs/CLOUD_RUN.md) for the one-time Google Cloud and GitHub variable setup.
+
 ## Development
 
 ```bash
