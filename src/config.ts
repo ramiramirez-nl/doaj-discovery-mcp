@@ -19,13 +19,12 @@ const readLogLevel = (value: string | undefined): AppConfig["logLevel"] => {
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   const maxResultsLimit = Math.max(1, readNumber(env.MAX_RESULTS_LIMIT, 25));
   const requestedDefault = Math.max(1, readNumber(env.MAX_RESULTS_DEFAULT, 10));
-  const doajApiKey = env.DOAJ_API_KEY?.trim() || undefined;
   const deploymentBaseUrl = env.DEPLOYMENT_BASE_URL?.trim() || undefined;
 
   return {
     port: readNumber(env.PORT, 3000),
     doajApiBaseUrl: env.DOAJ_API_BASE_URL || "https://doaj.org/api",
-    ...(doajApiKey ? { doajApiKey } : {}),
+    doajRequestTimeoutMs: Math.max(1_000, readNumber(env.DOAJ_REQUEST_TIMEOUT_MS, 10_000)),
     enableCache: readBoolean(env.ENABLE_CACHE, true),
     cacheDir: env.CACHE_DIR || ".cache/doaj",
     cacheTtlSeconds: Math.max(0, readNumber(env.CACHE_TTL_SECONDS, 86_400)),

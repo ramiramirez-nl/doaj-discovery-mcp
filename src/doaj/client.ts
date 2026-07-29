@@ -58,9 +58,18 @@ export class DoajClient {
     }
 
     const headers: Record<string, string> = { accept: "application/json" };
-    if (this.config.doajApiKey) headers.authorization = `Bearer ${this.config.doajApiKey}`;
-
-    const response = await fetch(url, { headers });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(this.config.doajRequestTimeoutMs)
+      });
+    } catch (error) {
+      const message = error instanceof Error && error.name === "TimeoutError"
+        ? "DOAJ request timed out. Try again later."
+        : "DOAJ request failed. Try again later.";
+      return { records: [], warnings: [message] };
+    }
     const warnings: string[] = [];
     if (response.status === 429) {
       const retryAfter = response.headers.get("retry-after");

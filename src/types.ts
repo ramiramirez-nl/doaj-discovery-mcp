@@ -3,7 +3,7 @@ export type UnknownRecord = Record<string, unknown>;
 export interface AppConfig {
   port: number;
   doajApiBaseUrl: string;
-  doajApiKey?: string;
+  doajRequestTimeoutMs: number;
   enableCache: boolean;
   cacheDir: string;
   cacheTtlSeconds: number;

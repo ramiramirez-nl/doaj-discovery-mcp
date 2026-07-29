@@ -8,7 +8,8 @@ describe("loadConfig", () => {
 
     expect(config.port).toBe(3000);
     expect(config.doajApiBaseUrl).toBe("https://doaj.org/api");
-    expect(config.doajApiKey).toBeUndefined();
+    expect("doajApiKey" in config).toBe(false);
+    expect(config.doajRequestTimeoutMs).toBe(10_000);
     expect(config.enableSemanticSearch).toBe(false);
     expect(config.semanticProvider).toBe("none");
     expect(Object.keys(config).some((key) => key.toLowerCase().includes("openai"))).toBe(false);
@@ -19,5 +20,12 @@ describe("loadConfig", () => {
 
     expect(config.maxResultsDefault).toBe(25);
     expect(config.maxResultsLimit).toBe(25);
+  });
+
+  test("ignores DOAJ API keys and clamps request timeout", () => {
+    const config = loadConfig({ DOAJ_API_KEY: "not-used", DOAJ_REQUEST_TIMEOUT_MS: "500" });
+
+    expect("doajApiKey" in config).toBe(false);
+    expect(config.doajRequestTimeoutMs).toBe(1_000);
   });
 });
