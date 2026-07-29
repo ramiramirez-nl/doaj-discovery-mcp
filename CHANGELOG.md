@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Brand mark: an open padlock, the conventional open-access signal, in DOAJ's published
+  `--grapefruit` (`#FD5A3B`). Served at `/icon.svg` and used as the favicon, the landing-page
+  header mark, and the README logo. The mark is original and geometric; it does not reproduce
+  DOAJ's logo, and the independence notice is unchanged.
+- `serverInfo` now advertises `icons`, `title`, `description` and `websiteUrl`, so MCP clients can
+  show the icon and a summary beside the server in their connector list.
+
+### Fixed
+
+- `img-src 'self'` added to the content security policy. `default-src 'none'` had no image
+  directive, so a favicon would have been blocked outright.
+
 ## 0.3.0-beta.1 - 2026-07-29
 
 ### Fixed

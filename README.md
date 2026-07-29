@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🔍 DOAJ Discovery MCP
+<img src="https://doaj-discovery-mcp-hbyczavkfq-ew.a.run.app/icon.svg" width="72" height="72" alt="">
+
+# DOAJ Discovery MCP
 
 **Search the Directory of Open Access Journals from any AI client — no account, no API key, no payment**
 
