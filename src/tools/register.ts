@@ -2,7 +2,19 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { DoajClient } from "../doaj/client.js";
-import type { AppConfig, NormalizedArticle, NormalizedJournal } from "../types.js";
+import { countryNameToCode, languageNameToCode } from "../doaj/codes.js";
+import {
+  buildFilterClauses,
+  buildQueryLadder,
+  composeQuery,
+  escapeQuotedValue
+} from "../doaj/query.js";
+import type {
+  AppConfig,
+  DoajSearchResult,
+  NormalizedArticle,
+  NormalizedJournal
+} from "../types.js";
 import { analyzeQueryPreferences } from "../query/preferences.js";
 import { rankRecords } from "../search/rank.js";
 import { explainDoajMetadata } from "./explain.js";
@@ -36,9 +48,65 @@ const limitSchema = (config: AppConfig) =>
     .optional()
     .default(config.maxResultsDefault);
 
+/** Candidate pool fetched from DOAJ before local ranking/filtering; must exceed `limit`
+ *  or ranking has nothing to sort and filters starve the result set. */
+const candidatePoolSize = (limit: number): number => Math.min(100, Math.max(25, limit * 5));
+
 const format = (payload: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }]
 });
+
+export const relaxedMatchWarning = (): string =>
+  "No results matched all key terms together, so the query was broadened to match any of them. These results may be only loosely related to the topic.";
+
+/**
+ * Runs the progressive-relaxation rungs and returns the first that yields records, so a precise
+ * `AND` result is always preferred over broad `OR` recall. Stops early on an upstream warning to
+ * avoid hammering DOAJ when it is rate limiting or unavailable. When only the final broadest rung
+ * produced anything, the caller is told the match was loose rather than being handed weak results
+ * that look authoritative.
+ */
+const searchWithRelaxation = async <T>(
+  queries: string[],
+  search: (query: string) => Promise<DoajSearchResult<T>>
+): Promise<{ result: DoajSearchResult<T>; query: string; relaxed: boolean }> => {
+  let last: { result: DoajSearchResult<T>; query: string; relaxed: boolean } | undefined;
+  for (const [index, query] of queries.entries()) {
+    const result = await search(query);
+    const relaxed = queries.length > 1 && index === queries.length - 1;
+    last = { result, query, relaxed };
+    if (result.records.length > 0 || result.warnings.length > 0) return last;
+  }
+  return last ?? { result: { records: [], warnings: [] }, query: queries[0] ?? "", relaxed: false };
+};
+
+const resolveCountryCode = (
+  country: string | undefined,
+  warnings: string[]
+): string | undefined => {
+  if (!country) return undefined;
+  const code = countryNameToCode(country);
+  if (!code) {
+    warnings.push(
+      `Could not resolve country "${country}" to a DOAJ country code; it was used for ranking only, not filtering.`
+    );
+  }
+  return code;
+};
+
+const resolveLanguageCode = (
+  language: string | undefined,
+  warnings: string[]
+): string | undefined => {
+  if (!language) return undefined;
+  const code = languageNameToCode(language);
+  if (!code) {
+    warnings.push(
+      `Could not resolve language "${language}" to a DOAJ language code; it was used for ranking only, not filtering.`
+    );
+  }
+  return code;
+};
 
 export const registerDiscoveryTools = (
   server: McpServer,
@@ -69,10 +137,32 @@ export const registerDiscoveryTools = (
       const preferences = analyzeQueryPreferences(input.query);
       if (input.country) preferences.preferredCountries.unshift(input.country);
       if (input.language) preferences.preferredLanguages.unshift(input.language);
-      const result = await client.searchJournals(input.query, { pageSize: input.limit });
+
+      const resolutionWarnings: string[] = [];
+      const countryCode = resolveCountryCode(input.country, resolutionWarnings);
+      const languageCode = resolveLanguageCode(input.language, resolutionWarnings);
+
+      const filters = buildFilterClauses(
+        {
+          ...(input.noApcOnly ? { hasApc: false as const } : {}),
+          ...(countryCode ? { countryCode } : {}),
+          ...(languageCode ? { languageCode } : {})
+        },
+        "journal"
+      );
+      const ladder = buildQueryLadder(input.query, {
+        ...(input.strict ? { mode: "precise" as const } : {})
+      }).map((freeText) => composeQuery(freeText, filters));
+
+      const pool = candidatePoolSize(input.limit);
+      const {
+        result,
+        query: effectiveQuery,
+        relaxed
+      } = await searchWithRelaxation(ladder, (query) =>
+        client.searchJournals(query, { pageSize: pool })
+      );
       let records = result.records;
-      if (input.noApcOnly || input.strict)
-        records = records.filter((record) => record.hasApc === false);
       if (input.license) {
         records = records.filter((record) =>
           record.licenses.some((license) =>
@@ -80,11 +170,23 @@ export const registerDiscoveryTools = (
           )
         );
       }
+
       const ranked = rankRecords<NormalizedJournal>(input.query, records, preferences).slice(
         0,
         input.limit
       );
-      return format({ warning: discoveryWarning, warnings: result.warnings, results: ranked });
+      return format({
+        warning: discoveryWarning,
+        warnings: [
+          ...resolutionWarnings,
+          ...(relaxed ? [relaxedMatchWarning()] : []),
+          ...result.warnings
+        ],
+        query: effectiveQuery,
+        total: result.total,
+        returned: ranked.length,
+        results: ranked
+      });
     }
   );
 
@@ -98,12 +200,30 @@ export const registerDiscoveryTools = (
     },
     async (input) => {
       const preferences = analyzeQueryPreferences(input.query);
-      const result = await client.searchArticles(input.query, { pageSize: input.limit });
+      const ladder = buildQueryLadder(input.query, {
+        ...(input.strict ? { mode: "precise" as const } : {})
+      });
+
+      const pool = candidatePoolSize(input.limit);
+      const {
+        result,
+        query: effectiveQuery,
+        relaxed
+      } = await searchWithRelaxation(ladder, (query) =>
+        client.searchArticles(query, { pageSize: pool })
+      );
       const ranked = rankRecords<NormalizedArticle>(input.query, result.records, preferences).slice(
         0,
         input.limit
       );
-      return format({ warning: discoveryWarning, warnings: result.warnings, results: ranked });
+      return format({
+        warning: discoveryWarning,
+        warnings: [...(relaxed ? [relaxedMatchWarning()] : []), ...result.warnings],
+        query: effectiveQuery,
+        total: result.total,
+        returned: ranked.length,
+        results: ranked
+      });
     }
   );
 
@@ -128,17 +248,43 @@ export const registerDiscoveryTools = (
       const preferences = analyzeQueryPreferences(query);
       if (input.preferredLanguage) preferences.preferredLanguages.unshift(input.preferredLanguage);
       if (input.preferredCountry) preferences.preferredCountries.unshift(input.preferredCountry);
-      const result = await client.searchJournals(query, { pageSize: input.limit });
-      const records = input.noApcOnly
-        ? result.records.filter((record) => record.hasApc === false)
-        : result.records;
-      const ranked = rankRecords<NormalizedJournal>(query, records, preferences).slice(
+
+      const resolutionWarnings: string[] = [];
+      const countryCode = resolveCountryCode(input.preferredCountry, resolutionWarnings);
+      const languageCode = resolveLanguageCode(input.preferredLanguage, resolutionWarnings);
+
+      const filters = buildFilterClauses(
+        {
+          ...(input.noApcOnly ? { hasApc: false as const } : {}),
+          ...(countryCode ? { countryCode } : {}),
+          ...(languageCode ? { languageCode } : {})
+        },
+        "journal"
+      );
+      const ladder = buildQueryLadder(query).map((freeText) => composeQuery(freeText, filters));
+
+      const pool = candidatePoolSize(input.limit);
+      const {
+        result,
+        query: effectiveQuery,
+        relaxed
+      } = await searchWithRelaxation(ladder, (rung) =>
+        client.searchJournals(rung, { pageSize: pool })
+      );
+      const ranked = rankRecords<NormalizedJournal>(query, result.records, preferences).slice(
         0,
         input.limit
       );
       return format({
         warning: `${discoveryWarning} Journal recommendations are manuscript-fit discovery candidates, not editorial decisions.`,
-        warnings: result.warnings,
+        warnings: [
+          ...resolutionWarnings,
+          ...(relaxed ? [relaxedMatchWarning()] : []),
+          ...result.warnings
+        ],
+        query: effectiveQuery,
+        total: result.total,
+        returned: ranked.length,
         results: ranked
       });
     }
@@ -153,15 +299,33 @@ export const registerDiscoveryTools = (
       inputSchema: baseInput
     },
     async (input) => {
-      const query = `diamond oa no APC ${input.query}`;
       const preferences = analyzeQueryPreferences(input.query);
-      const result = await client.searchJournals(query, { pageSize: input.limit });
-      const ranked = rankRecords<NormalizedJournal>(
-        query,
-        result.records.filter((record) => record.hasApc === false),
-        preferences
-      ).slice(0, input.limit);
-      return format({ warning: discoveryWarning, warnings: result.warnings, results: ranked });
+      const filters = buildFilterClauses({ hasApc: false }, "journal");
+      const ladder = buildQueryLadder(input.query, {
+        ...(input.strict ? { mode: "precise" as const } : {})
+      }).map((freeText) => composeQuery(freeText, filters));
+
+      const pool = candidatePoolSize(input.limit);
+      const {
+        result,
+        query: effectiveQuery,
+        relaxed
+      } = await searchWithRelaxation(ladder, (query) =>
+        client.searchJournals(query, { pageSize: pool })
+      );
+      const records = result.records.filter((record) => record.hasApc === false);
+      const ranked = rankRecords<NormalizedJournal>(input.query, records, preferences).slice(
+        0,
+        input.limit
+      );
+      return format({
+        warning: discoveryWarning,
+        warnings: [...(relaxed ? [relaxedMatchWarning()] : []), ...result.warnings],
+        query: effectiveQuery,
+        total: result.total,
+        returned: ranked.length,
+        results: ranked
+      });
     }
   );
 
@@ -179,7 +343,16 @@ export const registerDiscoveryTools = (
     },
     async (input) => {
       const query = [input.title, input.abstract].filter(Boolean).join(" ");
-      const result = await client.searchArticles(query, { pageSize: input.limit });
+      const ladder = buildQueryLadder(query);
+
+      const pool = candidatePoolSize(input.limit);
+      const {
+        result,
+        query: effectiveQuery,
+        relaxed
+      } = await searchWithRelaxation(ladder, (rung) =>
+        client.searchArticles(rung, { pageSize: pool })
+      );
       const ranked = rankRecords<NormalizedArticle>(
         query,
         result.records,
@@ -187,8 +360,55 @@ export const registerDiscoveryTools = (
       ).slice(0, input.limit);
       return format({
         warning: discoveryWarning,
-        warnings: [semanticFallbackWarning(), ...result.warnings],
+        warnings: [
+          semanticFallbackWarning(),
+          ...(relaxed ? [relaxedMatchWarning()] : []),
+          ...result.warnings
+        ],
+        query: effectiveQuery,
+        total: result.total,
+        returned: ranked.length,
         results: ranked
+      });
+    }
+  );
+
+  server.registerTool(
+    "get_doaj_journal_by_issn",
+    {
+      title: "Get DOAJ journal by ISSN",
+      description: "Look up a single DOAJ-indexed journal by its print or electronic ISSN.",
+      annotations: doajReadOnlyAnnotations,
+      inputSchema: { issn: z.string().min(8).max(20) }
+    },
+    async (input) => {
+      const value = escapeQuotedValue(input.issn.trim());
+      const query = `bibjson.eissn:"${value}" OR bibjson.pissn:"${value}"`;
+      const result = await client.searchJournals(query, { pageSize: 3 });
+      return format({
+        warning: discoveryWarning,
+        warnings: result.warnings,
+        results: result.records
+      });
+    }
+  );
+
+  server.registerTool(
+    "get_doaj_article_by_doi",
+    {
+      title: "Get DOAJ article by DOI",
+      description: "Look up a single DOAJ-indexed article by its DOI.",
+      annotations: doajReadOnlyAnnotations,
+      inputSchema: { doi: z.string().min(4).max(300) }
+    },
+    async (input) => {
+      const value = escapeQuotedValue(input.doi.trim());
+      const query = `doi:"${value}"`;
+      const result = await client.searchArticles(query, { pageSize: 3 });
+      return format({
+        warning: discoveryWarning,
+        warnings: result.warnings,
+        results: result.records
       });
     }
   );
