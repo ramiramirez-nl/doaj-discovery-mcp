@@ -49,6 +49,40 @@ describe("tools helpers", () => {
     expect(info.icons?.[0]?.mimeType).toBe("image/svg+xml");
   });
 
+  test("advertises server-level usage instructions to clients", () => {
+    const config = loadConfig({ ENABLE_CACHE: "false" });
+    const server = createMcpServer(new DoajClient(config), config);
+    const instructions = (server.server as unknown as { _instructions?: string })._instructions;
+
+    expect(instructions).toBeDefined();
+    expect(instructions).toContain("verify");
+    expect(instructions).toContain("abstract");
+  });
+
+  test("gives every input-schema field a non-empty description", () => {
+    const config = loadConfig({ ENABLE_CACHE: "false" });
+    const server = createMcpServer(new DoajClient(config), config);
+    const tools = (
+      server as unknown as {
+        _registeredTools: Record<
+          string,
+          { inputSchema?: { shape: Record<string, { description?: string }> } }
+        >;
+      }
+    )._registeredTools;
+
+    for (const [toolName, tool] of Object.entries(tools)) {
+      const shape = tool.inputSchema?.shape ?? {};
+      for (const [field, schema] of Object.entries(shape)) {
+        expect(schema.description, `${toolName}.${field} has no description`).toBeTruthy();
+        expect(
+          schema.description!.length,
+          `${toolName}.${field} description is too short to be useful`
+        ).toBeGreaterThan(10);
+      }
+    }
+  });
+
   test("marks every tool as read-only", () => {
     const server = createMcpServer(
       new DoajClient(loadConfig({ ENABLE_CACHE: "false" })),
@@ -189,5 +223,18 @@ describe("tool handlers end-to-end (fake DOAJ client)", () => {
 
     expect(decodeURIComponent(capturedUrl!.pathname)).toContain('doi:"10.1234/hq.1"');
     vi.unstubAllGlobals();
+  });
+
+  test("get_doaj_article_by_doi strips a doi.org URL prefix before querying", async () => {
+    let capturedUrl: URL | undefined;
+    const tools = await registeredHandlers(async (url) => {
+      capturedUrl = url;
+      return jsonResponse(fakeArticlePayload);
+    });
+    await tools.get_doaj_article_by_doi!.handler({ doi: "https://doi.org/10.1234/hq.1" });
+
+    const path = decodeURIComponent(capturedUrl!.pathname);
+    expect(path).toContain('doi:"10.1234/hq.1"');
+    expect(path).not.toContain("doi.org");
   });
 });

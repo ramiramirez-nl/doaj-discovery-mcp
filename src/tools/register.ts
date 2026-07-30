@@ -114,9 +114,25 @@ export const registerDiscoveryTools = (
   config: AppConfig
 ): void => {
   const baseInput = {
-    query: z.string().min(2).max(4_000),
-    limit: limitSchema(config),
-    strict: z.boolean().optional().default(false)
+    query: z
+      .string()
+      .min(2)
+      .max(4_000)
+      .describe(
+        'Search text: keywords, a topic, or a short phrase (e.g. "diamond open access economics"). ' +
+          "Longer text is automatically broadened if a narrow match returns nothing."
+      ),
+    limit: limitSchema(config).describe(
+      `Maximum number of results to return (1-${config.maxResultsLimit}). Defaults to ${config.maxResultsDefault}.`
+    ),
+    strict: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "If true, require every query term to match (AND) instead of relaxing to a broader OR " +
+          "match when the strict search returns nothing. Use for a well-defined, narrow query."
+      )
   };
 
   server.registerTool(
@@ -127,10 +143,34 @@ export const registerDiscoveryTools = (
       annotations: doajReadOnlyAnnotations,
       inputSchema: {
         ...baseInput,
-        country: z.string().max(100).optional(),
-        language: z.string().max(100).optional(),
-        noApcOnly: z.boolean().optional().default(false),
-        license: z.string().max(200).optional()
+        country: z
+          .string()
+          .max(100)
+          .optional()
+          .describe(
+            'Publisher country as a name, e.g. "Turkey" or "Brazil" (not an ISO code). Narrows ' +
+              "results to that country when recognized; otherwise only affects ranking."
+          ),
+        language: z
+          .string()
+          .max(100)
+          .optional()
+          .describe(
+            'Journal language as a name, e.g. "English" or "Turkish" (not an ISO code). Narrows ' +
+              "results to that language when recognized; otherwise only affects ranking."
+          ),
+        noApcOnly: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "If true, only return journals with no article processing charge (diamond/no-fee open access)."
+          ),
+        license: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('License substring to filter by, e.g. "CC BY" or "CC BY-NC".')
       }
     },
     async (input) => {
@@ -235,12 +275,38 @@ export const registerDiscoveryTools = (
         "Suggest discovery candidates for a manuscript abstract or topic; not an acceptance prediction.",
       annotations: doajReadOnlyAnnotations,
       inputSchema: {
-        abstract: z.string().min(20).max(12_000),
-        title: z.string().max(500).optional(),
-        limit: limitSchema(config),
-        preferredLanguage: z.string().max(100).optional(),
-        preferredCountry: z.string().max(100).optional(),
-        noApcOnly: z.boolean().optional().default(false)
+        abstract: z
+          .string()
+          .min(20)
+          .max(12_000)
+          .describe(
+            "The manuscript's abstract or a description of its topic. Pass the full text, not keywords."
+          ),
+        title: z
+          .string()
+          .max(500)
+          .optional()
+          .describe(
+            "The manuscript's title, if available. Improves matching alongside the abstract."
+          ),
+        limit: limitSchema(config).describe(
+          `Maximum number of results to return (1-${config.maxResultsLimit}). Defaults to ${config.maxResultsDefault}.`
+        ),
+        preferredLanguage: z
+          .string()
+          .max(100)
+          .optional()
+          .describe('Preferred journal language as a name, e.g. "English" (not an ISO code).'),
+        preferredCountry: z
+          .string()
+          .max(100)
+          .optional()
+          .describe('Preferred publisher country as a name, e.g. "Turkey" (not an ISO code).'),
+        noApcOnly: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("If true, only recommend journals with no article processing charge.")
       }
     },
     async (input) => {
@@ -336,9 +402,23 @@ export const registerDiscoveryTools = (
       description: "Find similar articles using local lexical and metadata similarity.",
       annotations: doajReadOnlyAnnotations,
       inputSchema: {
-        abstract: z.string().min(20).max(12_000),
-        title: z.string().max(500).optional(),
-        limit: limitSchema(config)
+        abstract: z
+          .string()
+          .min(20)
+          .max(12_000)
+          .describe(
+            "The reference abstract or topic description to find similar articles for. Pass the full text, not keywords."
+          ),
+        title: z
+          .string()
+          .max(500)
+          .optional()
+          .describe(
+            "The reference article's title, if available. Improves matching alongside the abstract."
+          ),
+        limit: limitSchema(config).describe(
+          `Maximum number of results to return (1-${config.maxResultsLimit}). Defaults to ${config.maxResultsDefault}.`
+        )
       }
     },
     async (input) => {
@@ -379,7 +459,15 @@ export const registerDiscoveryTools = (
       title: "Get DOAJ journal by ISSN",
       description: "Look up a single DOAJ-indexed journal by its print or electronic ISSN.",
       annotations: doajReadOnlyAnnotations,
-      inputSchema: { issn: z.string().min(8).max(20) }
+      inputSchema: {
+        issn: z
+          .string()
+          .min(8)
+          .max(20)
+          .describe(
+            'The journal\'s print (pISSN) or electronic (eISSN) ISSN, e.g. "1234-5678". Either form is checked.'
+          )
+      }
     },
     async (input) => {
       const value = escapeQuotedValue(input.issn.trim());
@@ -399,10 +487,19 @@ export const registerDiscoveryTools = (
       title: "Get DOAJ article by DOI",
       description: "Look up a single DOAJ-indexed article by its DOI.",
       annotations: doajReadOnlyAnnotations,
-      inputSchema: { doi: z.string().min(4).max(300) }
+      inputSchema: {
+        doi: z
+          .string()
+          .min(4)
+          .max(300)
+          .describe(
+            'The article\'s DOI, e.g. "10.1234/example.2024.001", with or without a "https://doi.org/" prefix.'
+          )
+      }
     },
     async (input) => {
-      const value = escapeQuotedValue(input.doi.trim());
+      const bareDoi = input.doi.trim().replace(/^(https?:\/\/)?(dx\.)?doi\.org\//i, "");
+      const value = escapeQuotedValue(bareDoi);
       const query = `doi:"${value}"`;
       const result = await client.searchArticles(query, { pageSize: 3 });
       return format({
@@ -420,7 +517,15 @@ export const registerDiscoveryTools = (
       description:
         "Explain DOAJ metadata terms such as APC, license, language, ISSN, or diamond OA.",
       annotations: localReadOnlyAnnotations,
-      inputSchema: { term: z.string().min(1).max(200) }
+      inputSchema: {
+        term: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe(
+            'The metadata term to explain, e.g. "APC", "diamond OA", "license", "ISSN", or "language".'
+          )
+      }
     },
     async (input) => format({ term: input.term, explanation: explainDoajMetadata(input.term) })
   );
