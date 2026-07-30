@@ -28,6 +28,26 @@ describe("loadConfig", () => {
     expect(config.maxResultsLimit).toBe(25);
   });
 
+  test("enables the in-memory cache by default with sane bounds", () => {
+    const config = loadConfig({});
+
+    expect(config.enableMemoryCache).toBe(true);
+    expect(config.memoryCacheMaxEntries).toBe(200);
+    expect(config.memoryCacheTtlSeconds).toBe(900);
+  });
+
+  test("can disable the in-memory cache and override its bounds", () => {
+    const config = loadConfig({
+      ENABLE_MEMORY_CACHE: "false",
+      MEMORY_CACHE_MAX_ENTRIES: "50",
+      MEMORY_CACHE_TTL_SECONDS: "60"
+    });
+
+    expect(config.enableMemoryCache).toBe(false);
+    expect(config.memoryCacheMaxEntries).toBe(50);
+    expect(config.memoryCacheTtlSeconds).toBe(60);
+  });
+
   test("ignores DOAJ API keys and clamps request timeout", () => {
     const config = loadConfig({
       BUILD_SHA: "abc123",
