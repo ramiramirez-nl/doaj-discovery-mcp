@@ -7,6 +7,8 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { ICON_PATH, ICON_SVG } from "./branding.js";
 import { FileCacheStore } from "./cache/file-cache-store.js";
+import { MemoryCacheStore } from "./cache/memory-cache-store.js";
+import type { CacheStore } from "./cache/store.js";
 import { loadConfig } from "./config.js";
 import { DoajClient } from "./doaj/client.js";
 import { renderHomePage, renderPrivacyPage } from "./http/pages.js";
@@ -19,6 +21,19 @@ import { registerDiscoveryTools } from "./tools/register.js";
 const SERVICE_SUMMARY =
   "Search DOAJ-indexed open-access journals and articles. Read-only discovery; no editorial review.";
 
+// Injected into the model's context as guidance on how and when to use this server, distinct
+// from `description` (a client-facing label shown in connector UIs).
+const SERVICE_INSTRUCTIONS = [
+  "Use these tools to discover DOAJ-indexed open-access journals and articles — not to decide " +
+    "whether a manuscript will be accepted, verify editorial criteria, or check journal " +
+    "legitimacy. Every result is a discovery candidate only; always tell the user to verify on " +
+    "DOAJ and the journal's own site before relying on it.",
+  "For manuscript or topic matching, pass the full abstract as free text rather than a few " +
+    "keywords — the tools rank and relax the query internally. Use `noApcOnly` or " +
+    "find_diamond_oa_journals for no-fee venues; pass `country`/`language` as names " +
+    '(e.g. "Turkey", "Turkish"), not ISO codes.'
+].join("\n\n");
+
 export const createMcpServer = (
   client: DoajClient,
   config: ReturnType<typeof loadConfig>
@@ -26,24 +41,47 @@ export const createMcpServer = (
   // Clients render these next to the server in their connector list. The icon must be an
   // absolute URL because the client fetches it itself, not through this server's page.
   const iconSrc = new URL(ICON_PATH, config.deploymentBaseUrl ?? PUBLIC_BASE_URL).toString();
-  const server = new McpServer({
-    name: SERVICE_NAME,
-    title: SERVICE_DISPLAY_NAME,
-    version: SERVICE_VERSION,
-    description: SERVICE_SUMMARY,
-    websiteUrl: config.deploymentBaseUrl ?? PUBLIC_BASE_URL,
-    icons: [{ src: iconSrc, mimeType: "image/svg+xml", sizes: ["any"] }]
-  });
+  const server = new McpServer(
+    {
+      name: SERVICE_NAME,
+      title: SERVICE_DISPLAY_NAME,
+      version: SERVICE_VERSION,
+      description: SERVICE_SUMMARY,
+      websiteUrl: config.deploymentBaseUrl ?? PUBLIC_BASE_URL,
+      icons: [{ src: iconSrc, mimeType: "image/svg+xml", sizes: ["any"] }]
+    },
+    { instructions: SERVICE_INSTRUCTIONS }
+  );
   registerDiscoveryTools(server, client, config);
   return server;
+};
+
+/**
+ * A single tool call can walk several query-relaxation rungs before one returns results, each a
+ * separate DOAJ round trip. The file cache is disabled in production (a read-only container
+ * filesystem), so an in-memory LRU is the fallback that still de-duplicates those rungs and any
+ * repeated queries within a process's lifetime, without touching disk.
+ */
+const selectCache = (
+  config: ReturnType<typeof loadConfig>
+): { cache?: CacheStore; ttl: number } => {
+  if (config.enableCache)
+    return { cache: new FileCacheStore(config.cacheDir), ttl: config.cacheTtlSeconds };
+  if (config.enableMemoryCache) {
+    return {
+      cache: new MemoryCacheStore({ maxEntries: config.memoryCacheMaxEntries }),
+      ttl: config.memoryCacheTtlSeconds
+    };
+  }
+  return { ttl: config.cacheTtlSeconds };
 };
 
 export const createHttpServer = (
   config = loadConfig(),
   suppliedClient?: DoajClient
 ): ReturnType<typeof createServer> => {
-  const cache = config.enableCache ? new FileCacheStore(config.cacheDir) : undefined;
-  const client = suppliedClient ?? new DoajClient(config, cache);
+  const { cache, ttl } = selectCache(config);
+  const client = suppliedClient ?? new DoajClient(config, cache, ttl);
   const rateLimiter = createRateLimiter({
     maxRequests: config.rateLimitMaxRequests,
     windowMs: config.rateLimitWindowSeconds * 1_000

@@ -10,6 +10,9 @@ export interface AppConfig {
   enableCache: boolean;
   cacheDir: string;
   cacheTtlSeconds: number;
+  enableMemoryCache: boolean;
+  memoryCacheMaxEntries: number;
+  memoryCacheTtlSeconds: number;
   maxResultsDefault: number;
   maxResultsLimit: number;
   trustProxy: boolean;

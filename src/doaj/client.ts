@@ -33,10 +33,15 @@ const parseRetryAfterMs = (value: string | null): number | undefined => {
 };
 
 export class DoajClient {
+  private readonly cacheTtlSeconds: number;
+
   constructor(
     private readonly config: AppConfig,
-    private readonly cache?: CacheStore
-  ) {}
+    private readonly cache?: CacheStore,
+    cacheTtlSecondsOverride?: number
+  ) {
+    this.cacheTtlSeconds = cacheTtlSecondsOverride ?? config.cacheTtlSeconds;
+  }
 
   searchJournals(
     query: string,
@@ -73,7 +78,7 @@ export class DoajClient {
     normalize: (record: unknown) => T
   ): Promise<DoajSearchResult<T>> {
     const key = createCacheKey("doaj-api", url.toString());
-    if (this.config.enableCache && this.cache) {
+    if (this.cache) {
       try {
         const cached = await this.cache.get<DoajSearchResult<T>>(key);
         if (cached) return cached.payload;
@@ -94,10 +99,10 @@ export class DoajClient {
     };
     if (result.total !== undefined) finalResult.total = result.total;
 
-    if (this.config.enableCache && this.cache) {
+    if (this.cache) {
       try {
         await this.cache.set(key, finalResult, {
-          ttlSeconds: this.config.cacheTtlSeconds,
+          ttlSeconds: this.cacheTtlSeconds,
           source: "doaj-api",
           payloadVersion: 1
         });

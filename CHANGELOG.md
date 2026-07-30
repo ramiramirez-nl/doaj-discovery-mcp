@@ -10,11 +10,23 @@
   DOAJ's logo, and the independence notice is unchanged.
 - `serverInfo` now advertises `icons`, `title`, `description` and `websiteUrl`, so MCP clients can
   show the icon and a summary beside the server in their connector list.
+- Server-level `instructions`, injected into the model's context, explaining the tools are
+  discovery-only, that results need independent verification, and how to pass abstracts and
+  country/language preferences.
+- Every tool input parameter now has a `.describe()` on its schema (previously none did), so a
+  client can tell what each argument means and how to use it without guessing.
+- `MemoryCacheStore`, an in-process LRU cache. Query relaxation can issue several DOAJ round trips
+  per tool call; this de-duplicates repeated or overlapping queries within a process's lifetime
+  without requiring disk (`ENABLE_MEMORY_CACHE`, `MEMORY_CACHE_MAX_ENTRIES`,
+  `MEMORY_CACHE_TTL_SECONDS`), so production keeps a working cache even with the file cache
+  disabled on Cloud Run's read-only filesystem.
 
 ### Fixed
 
 - `img-src 'self'` added to the content security policy. `default-src 'none'` had no image
   directive, so a favicon would have been blocked outright.
+- `get_doaj_article_by_doi` now strips a `https://doi.org/` (or `dx.doi.org/`) prefix before
+  querying — a very common way to paste a DOI — instead of querying for the literal URL.
 
 ## 0.3.0-beta.1 - 2026-07-29
 
