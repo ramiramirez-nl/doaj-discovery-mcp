@@ -60,17 +60,21 @@ production traffic.
 
 ## Cost Controls
 
-Create two monthly billing controls:
+**Configured:** a monthly EUR 10 alerts-only budget named `DOAJ Discovery MCP monthly`, scoped to
+this project and all its services, so Cloud Build and Artifact Registry are covered rather than
+only Cloud Run. Google notifies billing administrators and project owners at 50%, 80% and 100%.
 
-1. **TRY 500 spend cap:** single project `doaj-discovery-mcp`, single service Cloud Run. Google
-   automatically notifies billing administrators and project owners at 50%, 80%, and 100%, then
-   pauses new Cloud Run usage when enforcement catches up.
-2. **TRY 500 alerts-only budget:** the whole project and all services. This covers Cloud Build,
-   Artifact Registry, and other costs outside the Cloud Run cap.
+The amount is in euro because a budget must use its billing account's currency and this account is
+EUR; a lira figure cannot be entered. EUR 10 is roughly TRY 560 at the time of writing.
 
-Spend enforcement and billing reports can lag, so small overages remain possible. The Cloud Run
-cap uses gross eligible costs and can pause the service even while promotional credits cover the
-bill.
+**Not configured:** a spend cap. A budget alerts, it does not stop spending. Spend caps are a
+separate budget type that pauses Cloud Run once the cap is reached, and they are console-only:
+neither `gcloud billing budgets` nor the Cloud Billing Budget API exposes an enforcement field, so
+one has to be created under Billing, Budgets & alerts, choosing the spend-cap type and the Cloud
+Run service. Note that an enforced cap returns 5xx for every request until it is lifted by hand.
+
+Billing reports lag, so overages remain possible either way, and a cap uses gross eligible costs,
+meaning it can pause the service even while promotional credits cover the bill.
 
 ## Verify
 
